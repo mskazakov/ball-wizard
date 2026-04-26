@@ -4,6 +4,7 @@
 import type { GameState } from './utils/types';
 import { updatePlayer } from './player';
 import { updateCamera } from './arena';
+import { updateProjectiles } from './projectiles';
 import { render } from './render';
 
 /**
@@ -37,7 +38,10 @@ export function startGame(
     }
 
     // Обновление логики
+    // Порядок важен: сначала игрок (двигается), потом шары (стреляют из новой позиции),
+    // потом камера (следит за обновлённой позицией игрока).
     updatePlayer(state);
+    updateProjectiles(state);
     updateCamera(state);
 
     // Отрисовка

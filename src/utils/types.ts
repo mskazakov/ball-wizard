@@ -1,8 +1,9 @@
 // src/utils/types.ts
 // Централизованные TS-типы проекта. Все интерфейсы игры — здесь.
-// Экспортирует: Vec2, Player, Arena, Camera, InputState, TimeState, GameState.
+// Экспортирует: Vec2, Player, Arena, Camera, InputState, TimeState,
+// Projectile, Target, GameState.
 
-/** 2D-вектор. Используется для позиций и скоростей. */
+/** 2D-вектор. Используется для позиций, скоростей, направлений. */
 export interface Vec2 {
   x: number;
   y: number;
@@ -13,6 +14,15 @@ export interface Player {
   position: Vec2;
   size: number; // сторона квадрата в пикселях
   speed: number; // пикселей в секунду
+
+  // --- Стрельба ---
+  attackRadius: number; // в пределах какого радиуса игрок ищет цель
+  ballSackSize: number; // ёмкость обоймы (макс. шаров до перезарядки)
+  ballSackCurrent: number; // сколько шаров осталось до перезарядки
+  fireRate: number; // мс между выстрелами в обойме
+  lastShotAt: number; // timestamp (state.time.now) последнего выстрела
+  reloadTime: number; // мс на полную перезарядку
+  reloadProgress: number; // 0..reloadTime; -1 если сейчас не перезаряжаемся
 }
 
 /** Арена — игровое поле, больше экрана. */
@@ -38,6 +48,26 @@ export interface TimeState {
   deltaTime: number; // ms с прошлого кадра
 }
 
+/** Автошар, выпущенный игроком. Координаты — мировые. */
+export interface Projectile {
+  position: Vec2;
+  velocity: Vec2; // пикселей в секунду по каждой оси
+  radius: number; // визуальный радиус для отрисовки и коллизий
+  damage: number; // урон при попадании
+}
+
+/**
+ * Заглушка-мишень для тестов дня 3.
+ * В дне 4 будет заменена на полноценного врага (Enemy).
+ */
+export interface Target {
+  position: Vec2;
+  radius: number;
+  hp: number;
+  maxHp: number;
+  alive: boolean;
+}
+
 /** Главный объект состояния игры. Передаётся во все системы. */
 export interface GameState {
   player: Player;
@@ -45,4 +75,6 @@ export interface GameState {
   camera: Camera;
   input: InputState;
   time: TimeState;
+  projectiles: Projectile[];
+  targets: Target[];
 }
