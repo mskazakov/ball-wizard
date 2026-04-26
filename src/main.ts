@@ -1,8 +1,9 @@
-// main.ts — точка входа.
-// Находит <canvas> в DOM, настраивает его размер и запускает game loop.
-// Вся остальная логика будет вынесена в отдельные модули по мере роста проекта.
+// src/main.ts
+// Точка входа. Находит canvas, создаёт состояние игры, запускает game loop.
 
 import { startGame } from './game';
+import { createInitialState } from './state';
+import { setupInput } from './input';
 
 // --- Константы canvas ---
 const CANVAS_WIDTH = 800;
@@ -10,7 +11,7 @@ const CANVAS_HEIGHT = 600;
 const BACKGROUND_COLOR = '#000';
 
 /**
- * Инициализация: находим canvas, проверяем что всё на месте, запускаем игру.
+ * Инициализация: находим canvas, создаём состояние, навешиваем ввод, запускаем игру.
  */
 function init(): void {
   const canvas = document.getElementById('game');
@@ -30,7 +31,10 @@ function init(): void {
     throw new Error('Не удалось получить 2D-контекст canvas');
   }
 
-  startGame(canvas, ctx);
+  const state = createInitialState();
+  setupInput(state);
+
+  startGame(canvas, ctx, state);
 }
 
 init();

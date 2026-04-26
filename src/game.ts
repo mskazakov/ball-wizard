@@ -1,30 +1,48 @@
-// game.ts — главный игровой цикл.
-// Запускается один раз через startGame, дальше вызывает себя через requestAnimationFrame
-// 60 раз в секунду. На этом этапе только очищает canvas — логика и отрисовка появятся в следующие дни.
+// src/game.ts
+// Главный игровой цикл. Каждый кадр: обновить время → обновить логику → отрисовать.
 
-// --- Константы цикла ---
-const CLEAR_COLOR = '#000';
+import type { GameState } from './utils/types';
+import { updatePlayer } from './player';
+import { updateCamera } from './arena';
+import { render } from './render';
 
 /**
- * Точка входа в игру. Вызывается из main.ts после настройки canvas.
- * Запускает бесконечный цикл обновления и отрисовки.
+ * Точка входа в игру. Вызывается из main.ts.
+ * Запускает бесконечный цикл через requestAnimationFrame.
  *
  * @param canvas — настроенный HTMLCanvasElement
  * @param ctx — 2D-контекст этого canvas
+ * @param state — начальное состояние игры
  */
 export function startGame(
-  canvas: HTMLCanvasElement,
+  _canvas: HTMLCanvasElement,
   ctx: CanvasRenderingContext2D,
+  state: GameState,
 ): void {
-  /**
-   * Один кадр игры. Будет вызываться браузером 60 раз в секунду.
-   */
-  function frame(): void {
-    // Очистка экрана
-    ctx.fillStyle = CLEAR_COLOR;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  let lastTime = performance.now();
 
-    // Запросить следующий кадр
+  /**
+   * Один кадр игры. Браузер вызывает ~60 раз в секунду.
+   */
+  function frame(now: number): void {
+    // Обновляем время. deltaTime — мс с прошлого кадра.
+    state.time.deltaTime = now - lastTime;
+    state.time.now = now;
+    lastTime = now;
+
+    // Защита от больших скачков (например при возврате из неактивной вкладки).
+    // Если deltaTime > 100 мс, ограничиваем — иначе игрок улетит сквозь стену.
+    if (state.time.deltaTime > 100) {
+      state.time.deltaTime = 100;
+    }
+
+    // Обновление логики
+    updatePlayer(state);
+    updateCamera(state);
+
+    // Отрисовка
+    render(ctx, state);
+
     requestAnimationFrame(frame);
   }
 
