@@ -23,6 +23,11 @@ export interface Player {
   lastShotAt: number; // timestamp (state.time.now) последнего выстрела
   reloadTime: number; // мс на полную перезарядку
   reloadProgress: number; // 0..reloadTime; -1 если сейчас не перезаряжаемся
+
+  // --- Здоровье ---
+  hp: number; // текущее здоровье
+  maxHp: number; // максимальное здоровье
+  iFramesUntil: number; // до какого state.time.now игрок неуязвим
 }
 
 /** Арена — игровое поле, больше экрана. */
@@ -57,15 +62,16 @@ export interface Projectile {
 }
 
 /**
- * Заглушка-мишень для тестов дня 3.
- * В дне 4 будет заменена на полноценного врага (Enemy).
+ * Враг "грунт" — медленно идёт к игроку, наносит контактный урон.
+ * Координаты — мировые.
  */
-export interface Target {
+export interface Enemy {
   position: Vec2;
-  radius: number;
+  radius: number; // для отрисовки и коллизий
   hp: number;
   maxHp: number;
-  alive: boolean;
+  speed: number; // пикселей в секунду
+  contactDamage: number; // урон игроку при касании
 }
 
 /** Главный объект состояния игры. Передаётся во все системы. */
@@ -76,5 +82,5 @@ export interface GameState {
   input: InputState;
   time: TimeState;
   projectiles: Projectile[];
-  targets: Target[];
+  enemies: Enemy[];
 }

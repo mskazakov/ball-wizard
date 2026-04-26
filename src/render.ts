@@ -10,15 +10,23 @@ const ARENA_BORDER_COLOR = '#222222';
 const PLAYER_COLOR = '#ffffff';
 const ATTACK_RADIUS_COLOR = 'rgba(120, 200, 255, 0.25)'; // полупрозрачный голубой
 const PROJECTILE_COLOR = '#ffe066'; // жёлтый
-const TARGET_COLOR = '#e74c3c'; // красный
-const TARGET_DEAD_COLOR = '#444444'; // серый, мёртвая мишень
-const TARGET_HP_BG = '#222222';
-const TARGET_HP_FG = '#2ecc71';
+const ENEMY_COLOR = '#e74c3c'; // красный
+const ENEMY_HP_BG = '#222222';
+const ENEMY_HP_FG = '#2ecc71';
 
-// --- Размеры HP-бара мишени ---
+// --- HP-бар врага ---
 const HP_BAR_WIDTH = 50;
 const HP_BAR_HEIGHT = 5;
-const HP_BAR_OFFSET_Y = 8; // сколько px над мишенью
+const HP_BAR_OFFSET_Y = 8; // сколько px над врагом
+
+// --- HP-индикатор игрока (текстом, в углу экрана) ---
+const PLAYER_HP_TEXT_COLOR = '#ffffff';
+const PLAYER_HP_TEXT_FONT = '20px monospace';
+const PLAYER_HP_TEXT_X = 16;
+const PLAYER_HP_TEXT_Y = 28;
+
+// --- Подсветка игрока в i-frames (после получения урона) ---
+const PLAYER_IFRAMES_COLOR = '#ff5555'; // красноватый, пока неуязвим
 
 /**
  * Переводит мировые координаты в экранные с учётом камеры.
@@ -36,7 +44,7 @@ function worldToScreen(world: Vec2, state: GameState): Vec2 {
  *   1) фон
  *   2) граница арены
  *   3) радиус атаки игрока (под всем остальным, чтобы не мешал)
- *   4) мишени и их HP-бары
+ *   4) враги и их HP-бары
  *   5) шары
  *   6) игрок
  */
@@ -60,14 +68,17 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
   // 3) Радиус атаки игрока (визуализация для теста)
   drawAttackRadius(ctx, state);
 
-  // 4) Мишени
-  drawTargets(ctx, state);
+  // 4) Враги
+  drawEnemies(ctx, state);
 
   // 5) Шары
   drawProjectiles(ctx, state);
 
   // 6) Игрок
   drawPlayer(ctx, state);
+
+  // 7) HUD (поверх всего, в экранных координатах)
+  drawHud(ctx, state);
 }
 
 /**
@@ -82,29 +93,28 @@ function drawAttackRadius(ctx: CanvasRenderingContext2D, state: GameState): void
 }
 
 /**
- * Рисует мишени: красный круг + HP-бар над ним.
- * Мёртвая мишень рисуется серой и без HP-бара.
+ * Рисует врагов: красный круг + HP-бар над ним.
+ * Мёртвых врагов в массиве уже нет (удаляются в projectiles.resolveHits),
+ * поэтому проверка alive не нужна.
  */
-function drawTargets(ctx: CanvasRenderingContext2D, state: GameState): void {
-  for (const t of state.targets) {
-    const screen = worldToScreen(t.position, state);
+function drawEnemies(ctx: CanvasRenderingContext2D, state: GameState): void {
+  for (const e of state.enemies) {
+    const screen = worldToScreen(e.position, state);
 
-    ctx.fillStyle = t.alive ? TARGET_COLOR : TARGET_DEAD_COLOR;
+    ctx.fillStyle = ENEMY_COLOR;
     ctx.beginPath();
-    ctx.arc(screen.x, screen.y, t.radius, 0, Math.PI * 2);
+    ctx.arc(screen.x, screen.y, e.radius, 0, Math.PI * 2);
     ctx.fill();
-
-    if (!t.alive) continue;
 
     // HP-бар
     const barX = screen.x - HP_BAR_WIDTH / 2;
-    const barY = screen.y - t.radius - HP_BAR_OFFSET_Y - HP_BAR_HEIGHT;
+    const barY = screen.y - e.radius - HP_BAR_OFFSET_Y - HP_BAR_HEIGHT;
 
-    ctx.fillStyle = TARGET_HP_BG;
+    ctx.fillStyle = ENEMY_HP_BG;
     ctx.fillRect(barX, barY, HP_BAR_WIDTH, HP_BAR_HEIGHT);
 
-    const hpRatio = Math.max(0, t.hp / t.maxHp);
-    ctx.fillStyle = TARGET_HP_FG;
+    const hpRatio = Math.max(0, e.hp / e.maxHp);
+    ctx.fillStyle = ENEMY_HP_FG;
     ctx.fillRect(barX, barY, HP_BAR_WIDTH * hpRatio, HP_BAR_HEIGHT);
   }
 }
@@ -124,10 +134,27 @@ function drawProjectiles(ctx: CanvasRenderingContext2D, state: GameState): void 
 
 /**
  * Игрок — белый квадрат, центр в player.position.
+ * Во время i-frames рисуется красноватым (для теста — заменим вспышкой в дне 6).
  */
 function drawPlayer(ctx: CanvasRenderingContext2D, state: GameState): void {
   const half = state.player.size / 2;
   const screen = worldToScreen(state.player.position, state);
-  ctx.fillStyle = PLAYER_COLOR;
+  const isInvulnerable = state.time.now < state.player.iFramesUntil;
+  ctx.fillStyle = isInvulnerable ? PLAYER_IFRAMES_COLOR : PLAYER_COLOR;
   ctx.fillRect(screen.x - half, screen.y - half, state.player.size, state.player.size);
+}
+
+/**
+ * HUD дня 4 — простой текст с HP игрока.
+ * Полноценный HUD (полоса, иконки) — день 6 недели 2.
+ */
+function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
+  ctx.fillStyle = PLAYER_HP_TEXT_COLOR;
+  ctx.font = PLAYER_HP_TEXT_FONT;
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(
+    `HP: ${Math.max(0, Math.ceil(state.player.hp))} / ${state.player.maxHp}`,
+    PLAYER_HP_TEXT_X,
+    PLAYER_HP_TEXT_Y,
+  );
 }

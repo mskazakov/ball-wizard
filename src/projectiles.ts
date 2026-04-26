@@ -2,7 +2,7 @@
 // Логика автошаров: поиск цели, выстрел, движение, столкновения, перезарядка.
 // Экспортирует: updateProjectiles — главная функция, вызывается каждый кадр.
 
-import type { GameState, Projectile, Target, Vec2 } from './utils/types';
+import type { GameState, Projectile, Enemy, Vec2 } from './utils/types';
 import { distanceSquared, normalize, scale, subtract } from './utils/math';
 
 // --- Параметры шара ---
@@ -66,10 +66,10 @@ function tryShoot(state: GameState): void {
   if (p.ballSackCurrent <= 0) return; // обойма пуста (страховка)
   if (state.time.now - p.lastShotAt < p.fireRate) return; // слишком рано
 
-  const target = findNearestTarget(state);
-  if (!target) return; // нет цели — не стреляем
+  const enemy = findNearestEnemy(state);
+  if (!enemy) return; // нет цели — не стреляем
 
-  spawnProjectile(state, p.position, target.position);
+  spawnProjectile(state, p.position, enemy.position);
 
   p.ballSackCurrent -= 1;
   p.lastShotAt = state.time.now;
@@ -81,23 +81,24 @@ function tryShoot(state: GameState): void {
 }
 
 /**
- * Ищет ближайшую живую мишень в пределах attackRadius игрока.
+ * Ищет ближайшего врага в пределах attackRadius игрока.
  * Возвращает null если таких нет.
+ * Враги хранятся в state.enemies; мёртвые враги удаляются из массива в системе врагов,
+ * поэтому здесь проверка "alive" не нужна.
  */
-function findNearestTarget(state: GameState): Target | null {
+function findNearestEnemy(state: GameState): Enemy | null {
   const p = state.player;
   const radiusSq = p.attackRadius * p.attackRadius;
 
-  let nearest: Target | null = null;
+  let nearest: Enemy | null = null;
   let nearestDistSq = Infinity;
 
-  for (const t of state.targets) {
-    if (!t.alive) continue;
-    const dSq = distanceSquared(p.position, t.position);
+  for (const e of state.enemies) {
+    const dSq = distanceSquared(p.position, e.position);
     if (dSq > radiusSq) continue; // вне радиуса
     if (dSq < nearestDistSq) {
       nearestDistSq = dSq;
-      nearest = t;
+      nearest = e;
     }
   }
 
@@ -143,32 +144,33 @@ function moveProjectiles(state: GameState): void {
 // ------------------------------------------------------------
 
 /**
- * Проверяет каждый шар на пересечение с каждой живой мишенью.
- * Шары, попавшие в цель, помечаются velocity={0,0} и удаляются в cleanup —
- * это упрощает логику (нет "удаления во время итерации").
+ * Проверяет каждый шар на пересечение с каждым врагом.
+ * Шары, попавшие в цель, помечаются velocity={0,0} и удаляются в cleanup
+ * (не удаляем во время итерации).
+ * Мёртвые враги (hp<=0) тоже отфильтровываются здесь.
  */
 function resolveHits(state: GameState): void {
   for (const proj of state.projectiles) {
     if (proj.velocity.x === 0 && proj.velocity.y === 0) continue; // уже отработал
 
-    for (const t of state.targets) {
-      if (!t.alive) continue;
+    for (const e of state.enemies) {
+      if (e.hp <= 0) continue; // на удаление, пропускаем
 
-      const collisionRadius = proj.radius + t.radius;
-      const dSq = distanceSquared(proj.position, t.position);
+      const collisionRadius = proj.radius + e.radius;
+      const dSq = distanceSquared(proj.position, e.position);
       if (dSq > collisionRadius * collisionRadius) continue;
 
       // Попали
-      t.hp -= proj.damage;
-      if (t.hp <= 0) {
-        t.alive = false;
-      }
+      e.hp -= proj.damage;
       // Помечаем шар на удаление
       proj.velocity.x = 0;
       proj.velocity.y = 0;
       break;
     }
   }
+
+  // Удаляем мёртвых врагов
+  state.enemies = state.enemies.filter((e) => e.hp > 0);
 }
 
 // ------------------------------------------------------------

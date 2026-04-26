@@ -11,11 +11,11 @@ import type { GameState } from './utils/types';
  */
 export function setupInput(state: GameState): void {
   window.addEventListener('keydown', (e) => {
-    state.input.keys.add(e.key.toLowerCase());
+    state.input.keys.add(e.code);
   });
 
   window.addEventListener('keyup', (e) => {
-    state.input.keys.delete(e.key.toLowerCase());
+    state.input.keys.delete(e.code);
   });
 
   // Если окно теряет фокус — сбрасываем все клавиши,

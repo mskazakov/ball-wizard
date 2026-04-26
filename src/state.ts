@@ -2,7 +2,7 @@
 // Создание начального состояния игры.
 // Экспортирует: createInitialState — фабрика стартового GameState.
 
-import type { GameState, Target } from './utils/types';
+import type { GameState, Enemy } from './utils/types';
 
 // --- Параметры арены ---
 const ARENA_WIDTH = 2000;
@@ -11,6 +11,7 @@ const ARENA_HEIGHT = 2000;
 // --- Параметры игрока ---
 const PLAYER_SIZE = 32;
 const PLAYER_SPEED = 400; // пикселей в секунду
+const PLAYER_MAX_HP = 100;
 
 // --- Параметры стрельбы (стартовые, тюним позже) ---
 const PLAYER_ATTACK_RADIUS = 300; // в каком радиусе ищем цель
@@ -18,34 +19,39 @@ const BALL_SACK_SIZE = 5; // ёмкость обоймы
 const FIRE_RATE_MS = 150; // интервал между шарами в обойме
 const RELOAD_TIME_MS = 1000; // полная перезарядка
 
-// --- Параметры мишеней (заглушка дня 3, заменим на врагов в дне 4) ---
-const TARGET_RADIUS = 24;
-const TARGET_HP = 30;
+// --- Параметры врага "грунт" (стартовые, тюним после дня 4) ---
+const ENEMY_RADIUS = 18;
+const ENEMY_HP = 40; // 4 шара по 10 урона
+const ENEMY_SPEED = 90; // пикселей в секунду; в ~4.5 раза медленнее игрока
+const ENEMY_CONTACT_DAMAGE = 10; // урон игроку при касании
 
 /**
- * Создаёт три мишени в разных точках арены.
- * Расставлены на разных расстояниях от центра, чтобы тестировать выбор ближайшей.
+ * Создаёт несколько врагов-грунтов вокруг игрока для теста дня 4.
+ * Расставлены на разных расстояниях, чтобы видеть как сходятся к центру.
  */
-function createTargets(): Target[] {
+function createEnemies(): Enemy[] {
   const cx = ARENA_WIDTH / 2;
   const cy = ARENA_HEIGHT / 2;
 
-  // Координаты подобраны так:
-  //  - первая близко (≈200px от центра, попадает в радиус сразу)
-  //  - вторая средне (≈350px, вне радиуса пока игрок в центре)
-  //  - третья далеко (≈500px, тестируем что игрок может к ней подойти)
+  // Враги вокруг игрока на разных дистанциях:
+  //  - двое близко (≈250px) — атакуют первыми
+  //  - двое средне (≈400px) — догоняют
+  //  - один далеко (≈600px) — успеешь увидеть
   const positions = [
-    { x: cx + 200, y: cy - 100 },
-    { x: cx - 300, y: cy + 200 },
-    { x: cx + 100, y: cy + 450 },
+    { x: cx + 250, y: cy - 100 },
+    { x: cx - 250, y: cy + 100 },
+    { x: cx + 400, y: cy + 300 },
+    { x: cx - 400, y: cy - 300 },
+    { x: cx, y: cy - 600 },
   ];
 
   return positions.map((pos) => ({
     position: pos,
-    radius: TARGET_RADIUS,
-    hp: TARGET_HP,
-    maxHp: TARGET_HP,
-    alive: true,
+    radius: ENEMY_RADIUS,
+    hp: ENEMY_HP,
+    maxHp: ENEMY_HP,
+    speed: ENEMY_SPEED,
+    contactDamage: ENEMY_CONTACT_DAMAGE,
   }));
 }
 
@@ -70,6 +76,10 @@ export function createInitialState(): GameState {
       lastShotAt: 0,
       reloadTime: RELOAD_TIME_MS,
       reloadProgress: -1, // -1 = сейчас не перезаряжаемся
+
+      hp: PLAYER_MAX_HP,
+      maxHp: PLAYER_MAX_HP,
+      iFramesUntil: 0,
     },
     arena: {
       width: ARENA_WIDTH,
@@ -87,6 +97,6 @@ export function createInitialState(): GameState {
       deltaTime: 0,
     },
     projectiles: [],
-    targets: createTargets(),
+    enemies: createEnemies(),
   };
 }
