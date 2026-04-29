@@ -32,7 +32,7 @@ function init(): void {
   }
 
   const state = createInitialState();
-  setupInput(state);
+  setupInput(state, canvas);
 
   startGame(canvas, ctx, state);
 }

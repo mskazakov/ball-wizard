@@ -99,7 +99,7 @@ export interface Enemy {
  *   - 'between': все убиты, идёт пауза перед следующей волной
  *   - 'won': последняя волна пройдена, игра окончена победой
  */
-export type WaveState = 'spawning' | 'fighting' | 'between' | 'won';
+export type WaveState = 'spawning' | 'fighting' | 'between';
 
 /** Состояние системы волн. */
 export interface Waves {
@@ -107,6 +107,17 @@ export interface Waves {
   state: WaveState;
   betweenTimer: number; // мс до начала следующей волны (используется в state='between')
 }
+
+/**
+ * Глобальное состояние рана:
+ *   - 'playing': идёт игра (волны спавнятся, бьются, между волнами)
+ *   - 'won':     все волны пройдены, экран победы, игра остановлена
+ *   - 'gameOver': игрок умер, экран Game Over, игра остановлена
+ *
+ * Хранится отдельно от waves.state чтобы смерть игрока не путалась
+ * с состояниями системы волн. См. DECISIONS.md, день 7 недели 1.
+ */
+export type RunState = 'playing' | 'won' | 'gameOver';
 
 /** Главный объект состояния игры. Передаётся во все системы. */
 export interface GameState {
@@ -118,4 +129,6 @@ export interface GameState {
   projectiles: Projectile[];
   enemies: Enemy[];
   waves: Waves;
+  /** Глобальное состояние рана. См. RunState. */
+  runState: RunState;
 }

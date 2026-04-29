@@ -50,7 +50,10 @@ export function updateWaves(state: GameState): void {
       if (state.enemies.length === 0) {
         // Все враги убиты
         if (w.current >= MAX_WAVES) {
-          w.state = 'won';
+          // Финальная волна пройдена — игра выиграна.
+          // waves.state остаётся 'fighting' и больше не используется,
+          // потому что весь game loop останавливается по runState.
+          state.runState = 'won';
         } else {
           w.state = 'between';
           w.betweenTimer = BETWEEN_WAVE_DELAY_MS;
@@ -64,10 +67,6 @@ export function updateWaves(state: GameState): void {
         w.current += 1;
         w.state = 'spawning';
       }
-      break;
-
-    case 'won':
-      // Ничего не делаем. Игрок видит экран победы (рендерится в render.ts).
       break;
   }
 }

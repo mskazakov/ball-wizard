@@ -118,8 +118,13 @@ function resolveContactDamage(state: GameState): void {
     }
   }
 
-  // Логика "Game Over" будет в дне 7. Сейчас HP может уйти в минус —
-  // визуально клампится в drawHud, дальше пока не идём.
+  // Game Over: HP опустилось до нуля или ниже.
+  // Клампим до 0 (визуально и логически — в HUD не должно быть отрицательных чисел),
+  // переключаем глобальное состояние рана.
+  if (player.hp <= 0) {
+    player.hp = 0;
+    state.runState = 'gameOver';
+  }
 }
 
 /**

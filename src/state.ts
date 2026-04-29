@@ -70,5 +70,34 @@ export function createInitialState(): GameState {
       state: 'spawning',
       betweenTimer: 0,
     },
+    runState: 'playing',
   };
+}
+
+/**
+ * Сбрасывает существующий GameState в стартовое состояние.
+ * Используется для рестарта игры — мутирует переданный объект,
+ * НЕ создаёт новый. Это критично: ссылку на state держат замыкания
+ * в game loop и обработчики ввода, заменить её снаружи нельзя.
+ *
+ * Реализация: создаём свежий state через createInitialState и копируем
+ * все поля в существующий объект. Так структура определяется в одном месте,
+ * и при добавлении нового поля в GameState его не нужно дублировать здесь.
+ */
+export function resetState(state: GameState): void {
+  const fresh = createInitialState();
+
+  state.player = fresh.player;
+  state.arena = fresh.arena;
+  state.camera = fresh.camera;
+  state.time = fresh.time;
+  state.projectiles = fresh.projectiles;
+  state.enemies = fresh.enemies;
+  state.waves = fresh.waves;
+  state.runState = fresh.runState;
+
+  // input.keys НЕ пересоздаём — Set держится тем же,
+  // обработчики keydown/keyup в input.ts ссылаются на него по ссылке.
+  // Если игрок зажал WASD — после рестарта продолжит ехать, это ок.
+  state.input.keys.clear();
 }

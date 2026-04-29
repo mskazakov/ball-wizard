@@ -40,17 +40,17 @@ export function startGame(
       state.time.deltaTime = 100;
     }
 
-    // Обновление логики
-    // Порядок важен: сначала игрок (двигается), потом враги, потом шары
-    // (стреляют из обновлённой позиции игрока в обновлённую позицию врагов),
-    // потом cleanup (убираем мёртвых единым местом — единственный источник истины
-    // про "враг умер"), потом камера (следит за позицией игрока).
-    updatePlayer(state);
-    updateEnemies(state);
-    updateProjectiles(state);
-    cleanupDead(state);
-    updateWaves(state);
-    updateCamera(state);
+    // Обновление логики — только пока ран идёт.
+    // На 'won' и 'gameOver' всё замораживается: игрок не двигается, шары не летят,
+    // враги стоят. Рендер продолжает работать — рисует финальный кадр + оверлей.
+    if (state.runState === 'playing') {
+      updatePlayer(state);
+      updateEnemies(state);
+      updateProjectiles(state);
+      cleanupDead(state);
+      updateWaves(state);
+      updateCamera(state);
+    }
 
     // Отрисовка
     render(ctx, state);

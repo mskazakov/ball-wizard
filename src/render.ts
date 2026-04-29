@@ -38,6 +38,25 @@ const WIN_OVERLAY_COLOR = 'rgba(0, 0, 0, 0.7)';
 const WIN_TEXT_COLOR = '#ffe066';
 const WIN_TEXT_FONT = 'bold 64px monospace';
 
+// --- Экран Game Over ---
+const GAMEOVER_OVERLAY_COLOR = 'rgba(40, 0, 0, 0.7)';
+const GAMEOVER_TEXT_COLOR = '#ff6666';
+const GAMEOVER_TEXT_FONT = 'bold 64px monospace';
+
+// --- Кнопка рестарта (общая для обоих экранов) ---
+/**
+ * Прямоугольник кнопки в экранных координатах.
+ * Координаты считаются в drawRestartButton от центра canvas, ниже текста заголовка.
+ * Эти же значения читает обработчик клика в input.ts через getRestartButtonRect().
+ */
+const RESTART_BTN_WIDTH = 240;
+const RESTART_BTN_HEIGHT = 60;
+const RESTART_BTN_OFFSET_Y = 60; // на сколько px ниже центра экрана
+const RESTART_BTN_BG = '#ffffff';
+const RESTART_BTN_TEXT_COLOR = '#000000';
+const RESTART_BTN_FONT = 'bold 24px monospace';
+const RESTART_BTN_LABEL = 'RESTART';
+
 // --- Подсветка игрока в i-frames (после получения урона) ---
 const PLAYER_IFRAMES_COLOR = '#ff5555'; // красноватый, пока неуязвим
 
@@ -202,9 +221,12 @@ function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
     WAVE_TEXT_Y,
   );
 
-  // Экран победы
-  if (state.waves.state === 'won') {
+  // Финальные оверлеи: победа или поражение.
+  // Оба останавливают игру (см. game.ts) и показывают кнопку рестарта.
+  if (state.runState === 'won') {
     drawWinScreen(ctx);
+  } else if (state.runState === 'gameOver') {
+    drawGameOverScreen(ctx);
   }
 
   // Сбрасываем textAlign на дефолт, чтобы не повлиять на другой код
@@ -225,9 +247,69 @@ function drawWinScreen(ctx: CanvasRenderingContext2D): void {
   ctx.font = WIN_TEXT_FONT;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('YOU WIN', canvas.width / 2, canvas.height / 2);
+  ctx.fillText('YOU WIN', canvas.width / 2, canvas.height / 2 - 40);
+
+  drawRestartButton(ctx);
 
   ctx.textBaseline = 'alphabetic'; // вернуть дефолт
+}
+
+/**
+ * Полупрозрачная заливка + крупный текст "GAME OVER" по центру + кнопка рестарта.
+ */
+function drawGameOverScreen(ctx: CanvasRenderingContext2D): void {
+  const canvas = ctx.canvas;
+
+  ctx.fillStyle = GAMEOVER_OVERLAY_COLOR;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = GAMEOVER_TEXT_COLOR;
+  ctx.font = GAMEOVER_TEXT_FONT;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 40);
+
+  drawRestartButton(ctx);
+
+  ctx.textBaseline = 'alphabetic'; // вернуть дефолт
+}
+
+/**
+ * Рисует белую кнопку "RESTART" по центру, ниже заголовка экрана.
+ * Хитбокс кнопки считается отдельной функцией getRestartButtonRect —
+ * её зовёт обработчик клика, чтобы знать куда мы тыкнули.
+ */
+function drawRestartButton(ctx: CanvasRenderingContext2D): void {
+  const rect = getRestartButtonRect(ctx.canvas);
+
+  ctx.fillStyle = RESTART_BTN_BG;
+  ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+
+  ctx.fillStyle = RESTART_BTN_TEXT_COLOR;
+  ctx.font = RESTART_BTN_FONT;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(RESTART_BTN_LABEL, rect.x + rect.w / 2, rect.y + rect.h / 2);
+}
+
+/**
+ * Возвращает прямоугольник кнопки рестарта в экранных координатах.
+ * Используется и в render (для отрисовки), и в input (для проверки клика).
+ *
+ * @returns {x, y, w, h} — верхний левый угол, ширина, высота
+ */
+export function getRestartButtonRect(canvas: HTMLCanvasElement): {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+} {
+  return {
+    x: canvas.width / 2 - RESTART_BTN_WIDTH / 2,
+    y: canvas.height / 2 + RESTART_BTN_OFFSET_Y,
+    w: RESTART_BTN_WIDTH,
+    h: RESTART_BTN_HEIGHT,
+  };
 }
 
 /**
