@@ -141,5 +141,8 @@ function createEnemy(position: Vec2): Enemy {
     maxHp: ENEMY_HP,
     speed: ENEMY_SPEED,
     contactDamage: ENEMY_CONTACT_DAMAGE,
+    flashUntil: 0,
+    ghostHp: ENEMY_HP,
+    knockbackVelocity: { x: 0, y: 0 },
   };
 }

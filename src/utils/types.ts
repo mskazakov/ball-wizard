@@ -1,7 +1,7 @@
 // src/utils/types.ts
 // Централизованные TS-типы проекта. Все интерфейсы игры — здесь.
 // Экспортирует: Vec2, Player, Arena, Camera, InputState, TimeState,
-// Projectile, Target, GameState.
+// Projectile, Enemy, WaveState, Waves, GameState.
 
 /** 2D-вектор. Используется для позиций, скоростей, направлений. */
 export interface Vec2 {
@@ -28,6 +28,10 @@ export interface Player {
   hp: number; // текущее здоровье
   maxHp: number; // максимальное здоровье
   iFramesUntil: number; // до какого state.time.now игрок неуязвим
+
+  // --- Hit feedback (день 6) ---
+  /** До какого state.time.now экран залит красным после получения урона. */
+  redFlashUntil: number;
 }
 
 /** Арена — игровое поле, больше экрана. */
@@ -72,6 +76,36 @@ export interface Enemy {
   maxHp: number;
   speed: number; // пикселей в секунду
   contactDamage: number; // урон игроку при касании
+
+  // --- Hit feedback (день 6) ---
+  /** До какого state.time.now враг подсвечен белым после попадания. */
+  flashUntil: number;
+  /**
+   * Призрачное HP — копия hp, которая плавно догоняет реальное при уроне.
+   * Рисуется белой полосой над основной HP-полосой как в Доте.
+   */
+  ghostHp: number;
+  /**
+   * Скорость отталкивания от удара (px/сек). Затухает каждый кадр,
+   * прибавляется к обычному движению. {0,0} = нет knockback.
+   */
+  knockbackVelocity: Vec2;
+}
+
+/**
+ * Состояние волны:
+ *   - 'spawning': враги создаются (сейчас одномоментно, в техдолге — постепенно)
+ *   - 'fighting': враги уже на арене, ждём пока всех убьют
+ *   - 'between': все убиты, идёт пауза перед следующей волной
+ *   - 'won': последняя волна пройдена, игра окончена победой
+ */
+export type WaveState = 'spawning' | 'fighting' | 'between' | 'won';
+
+/** Состояние системы волн. */
+export interface Waves {
+  current: number; // номер текущей волны (1..MAX_WAVES)
+  state: WaveState;
+  betweenTimer: number; // мс до начала следующей волны (используется в state='between')
 }
 
 /** Главный объект состояния игры. Передаётся во все системы. */
@@ -83,4 +117,5 @@ export interface GameState {
   time: TimeState;
   projectiles: Projectile[];
   enemies: Enemy[];
+  waves: Waves;
 }

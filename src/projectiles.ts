@@ -10,6 +10,12 @@ const PROJECTILE_RADIUS = 6; // визуальный радиус и хитбо�
 const PROJECTILE_SPEED = 900; // пикселей в секунду
 const PROJECTILE_DAMAGE = 10;
 
+// --- Hit feedback (день 6) ---
+/** Сколько мс враг подсвечен белым после попадания. */
+const ENEMY_FLASH_DURATION_MS = 90;
+/** Стартовая скорость отталкивания (px/сек) при попадании шара. */
+const KNOCKBACK_INITIAL_SPEED = 200;
+
 /**
  * Главная функция системы шаров. Вызывается раз за кадр.
  * Порядок операций важен:
@@ -163,6 +169,14 @@ function resolveHits(state: GameState): void {
 
       // Попали
       e.hp -= proj.damage;
+      e.flashUntil = state.time.now + ENEMY_FLASH_DURATION_MS;
+      // Knockback в направлении полёта шара. Шар уже летит нормализованно
+      // по скорости PROJECTILE_SPEED, поэтому делим velocity на скорость
+      // чтобы получить единичный вектор направления.
+      const dirX = proj.velocity.x / PROJECTILE_SPEED;
+      const dirY = proj.velocity.y / PROJECTILE_SPEED;
+      e.knockbackVelocity.x = dirX * KNOCKBACK_INITIAL_SPEED;
+      e.knockbackVelocity.y = dirY * KNOCKBACK_INITIAL_SPEED;
       // Помечаем шар на удаление
       proj.velocity.x = 0;
       proj.velocity.y = 0;

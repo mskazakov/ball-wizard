@@ -11,8 +11,10 @@ const PLAYER_COLOR = '#ffffff';
 const ATTACK_RADIUS_COLOR = 'rgba(120, 200, 255, 0.25)'; // полупрозрачный голубой
 const PROJECTILE_COLOR = '#ffe066'; // жёлтый
 const ENEMY_COLOR = '#e74c3c'; // красный
+const ENEMY_FLASH_COLOR = '#ffffff'; // вспышка при попадании
 const ENEMY_HP_BG = '#222222';
 const ENEMY_HP_FG = '#2ecc71';
+const ENEMY_HP_GHOST = '#ffffff'; // белая полоса между реальным HP и ghost HP
 
 // --- HP-бар врага ---
 const HP_BAR_WIDTH = 50;
@@ -38,6 +40,12 @@ const WIN_TEXT_FONT = 'bold 64px monospace';
 
 // --- Подсветка игрока в i-frames (после получения урона) ---
 const PLAYER_IFRAMES_COLOR = '#ff5555'; // красноватый, пока неуязвим
+
+// --- Красная вспышка экрана при уроне ---
+/** Длительность вспышки в мс — должна совпадать с PLAYER_RED_FLASH_MS в enemies.ts. */
+const RED_FLASH_DURATION_MS = 250;
+/** Максимальная прозрачность вспышки в момент удара (0..1). */
+const RED_FLASH_MAX_ALPHA = 0.2;
 
 /**
  * Переводит мировые координаты в экранные с учётом камеры.
@@ -90,6 +98,9 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
 
   // 7) HUD (поверх всего, в экранных координатах)
   drawHud(ctx, state);
+
+  // 8) Красная вспышка при уроне игроку — поверх HUD, чтобы накрыть весь экран
+  drawDamageFlash(ctx, state);
 }
 
 /**
@@ -112,7 +123,8 @@ function drawEnemies(ctx: CanvasRenderingContext2D, state: GameState): void {
   for (const e of state.enemies) {
     const screen = worldToScreen(e.position, state);
 
-    ctx.fillStyle = ENEMY_COLOR;
+    const isFlashing = state.time.now < e.flashUntil;
+    ctx.fillStyle = isFlashing ? ENEMY_FLASH_COLOR : ENEMY_COLOR;
     ctx.beginPath();
     ctx.arc(screen.x, screen.y, e.radius, 0, Math.PI * 2);
     ctx.fill();
@@ -124,6 +136,12 @@ function drawEnemies(ctx: CanvasRenderingContext2D, state: GameState): void {
     ctx.fillStyle = ENEMY_HP_BG;
     ctx.fillRect(barX, barY, HP_BAR_WIDTH, HP_BAR_HEIGHT);
 
+    // Призрачный HP — белая полоса от реального HP до ghostHp
+    const ghostRatio = Math.max(0, e.ghostHp / e.maxHp);
+    ctx.fillStyle = ENEMY_HP_GHOST;
+    ctx.fillRect(barX, barY, HP_BAR_WIDTH * ghostRatio, HP_BAR_HEIGHT);
+
+    // Реальный HP — зелёная полоса поверх белой (рисуется сверху, поэтому видна)
     const hpRatio = Math.max(0, e.hp / e.maxHp);
     ctx.fillStyle = ENEMY_HP_FG;
     ctx.fillRect(barX, barY, HP_BAR_WIDTH * hpRatio, HP_BAR_HEIGHT);
@@ -210,4 +228,20 @@ function drawWinScreen(ctx: CanvasRenderingContext2D): void {
   ctx.fillText('YOU WIN', canvas.width / 2, canvas.height / 2);
 
   ctx.textBaseline = 'alphabetic'; // вернуть дефолт
+}
+
+/**
+ * Красная полупрозрачная заливка поверх всего экрана при получении урона.
+ * Прозрачность линейно затухает от RED_FLASH_MAX_ALPHA до 0 за RED_FLASH_DURATION_MS.
+ */
+function drawDamageFlash(ctx: CanvasRenderingContext2D, state: GameState): void {
+  const remaining = state.player.redFlashUntil - state.time.now;
+  if (remaining <= 0) return;
+
+  const ratio = remaining / RED_FLASH_DURATION_MS; // 1 в момент удара, 0 в конце
+  const alpha = RED_FLASH_MAX_ALPHA * ratio;
+
+  const canvas = ctx.canvas;
+  ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 }

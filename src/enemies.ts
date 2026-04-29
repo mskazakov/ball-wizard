@@ -10,6 +10,23 @@ import { distanceSquared, normalize, subtract } from './utils/math';
 
 // --- I-frames игрока ---
 const PLAYER_I_FRAMES_MS = 500; // длительность неуязвимости после удара
+/** Сколько мс длится красная вспышка экрана при уроне. */
+const PLAYER_RED_FLASH_MS = 250;
+
+// --- Knockback (день 6) ---
+/**
+ * Множитель затухания knockback за секунду. 0.001 значит за 1с скорость падает в 1000 раз.
+ * Применяется как pow(KNOCKBACK_DECAY, dtSec).
+ */
+const KNOCKBACK_DECAY = 0.001;
+/** Если скорость knockback меньше этого порога — обнуляем (px/сек). */
+const KNOCKBACK_STOP_THRESHOLD = 5;
+
+// --- Ghost HP (день 6) ---
+/** Задержка перед началом догоняния hp (мс) — чтобы белая полоса успела "висеть". */
+const GHOST_HP_DELAY_MS = 200;
+/** Скорость догоняния ghostHp в HP/сек после задержки. */
+const GHOST_HP_CATCHUP_SPEED = 90;
 
 /**
  * Главная функция системы врагов. Вызывается раз за кадр.
@@ -19,6 +36,7 @@ const PLAYER_I_FRAMES_MS = 500; // длительность неуязвимос
  */
 export function updateEnemies(state: GameState): void {
   moveEnemies(state);
+  updateGhostHp(state);
   resolveContactDamage(state);
 }
 
@@ -36,9 +54,28 @@ function moveEnemies(state: GameState): void {
   const playerPos = state.player.position;
 
   for (const enemy of state.enemies) {
+    // 1) Обычное движение к игроку
     const direction = directionTo(enemy.position, playerPos);
     enemy.position.x += direction.x * enemy.speed * dtSec;
     enemy.position.y += direction.y * enemy.speed * dtSec;
+
+    // 2) Knockback (применяется поверх обычного движения)
+    enemy.position.x += enemy.knockbackVelocity.x * dtSec;
+    enemy.position.y += enemy.knockbackVelocity.y * dtSec;
+
+    // 3) Затухание knockback. pow(decay, dtSec) — фрейм-рейт независимо.
+    const decay = Math.pow(KNOCKBACK_DECAY, dtSec);
+    enemy.knockbackVelocity.x *= decay;
+    enemy.knockbackVelocity.y *= decay;
+
+    // 4) Обнуляем если почти ноль
+    if (
+      Math.abs(enemy.knockbackVelocity.x) < KNOCKBACK_STOP_THRESHOLD &&
+      Math.abs(enemy.knockbackVelocity.y) < KNOCKBACK_STOP_THRESHOLD
+    ) {
+      enemy.knockbackVelocity.x = 0;
+      enemy.knockbackVelocity.y = 0;
+    }
   }
 }
 
@@ -75,6 +112,7 @@ function resolveContactDamage(state: GameState): void {
     if (isContacting(enemy, player.position, playerHalf)) {
       player.hp -= enemy.contactDamage;
       player.iFramesUntil = state.time.now + PLAYER_I_FRAMES_MS;
+      player.redFlashUntil = state.time.now + PLAYER_RED_FLASH_MS;
       // Только один удар за кадр: не получаем урон от 5 врагов сразу
       break;
     }
@@ -103,4 +141,34 @@ function clamp(value: number, min: number, max: number): number {
   if (value < min) return min;
   if (value > max) return max;
   return value;
+}
+
+/**
+ * Призрачное HP плавно догоняет реальное.
+ * Логика: после получения урона ghostHp > hp. Через GHOST_HP_DELAY_MS
+ * после последней вспышки (используем flashUntil как маркер последнего попадания)
+ * ghostHp начинает уменьшаться к hp со скоростью GHOST_HP_CATCHUP_SPEED HP/сек.
+ *
+ * Использование flashUntil как timestamp удара: flashUntil = удар + 90мс,
+ * значит "удар был в момент now < flashUntil" мы трактуем как "только что попали".
+ * Задержка догоняния = пока (flashUntil - now) > 0, мы внутри окна вспышки + delay.
+ */
+function updateGhostHp(state: GameState): void {
+  const dtSec = state.time.deltaTime / 1000;
+
+  for (const enemy of state.enemies) {
+    if (enemy.ghostHp <= enemy.hp) {
+      // Реальное HP уже догнало или равно — синхронизируем (на случай отрицательного hp)
+      enemy.ghostHp = enemy.hp;
+      continue;
+    }
+
+    // Ждём пока пройдёт окно вспышки + задержка
+    const timeSinceFlashStart = state.time.now - (enemy.flashUntil - 90);
+    if (timeSinceFlashStart < 90 + GHOST_HP_DELAY_MS) continue;
+
+    // Догоняем
+    enemy.ghostHp -= GHOST_HP_CATCHUP_SPEED * dtSec;
+    if (enemy.ghostHp < enemy.hp) enemy.ghostHp = enemy.hp;
+  }
 }

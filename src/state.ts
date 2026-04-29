@@ -46,6 +46,7 @@ export function createInitialState(): GameState {
       hp: PLAYER_MAX_HP,
       maxHp: PLAYER_MAX_HP,
       iFramesUntil: 0,
+      redFlashUntil: 0,
     },
     arena: {
       width: ARENA_WIDTH,
