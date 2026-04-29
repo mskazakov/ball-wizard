@@ -2,7 +2,7 @@
 // Создание начального состояния игры.
 // Экспортирует: createInitialState — фабрика стартового GameState.
 
-import type { GameState, Enemy } from './utils/types';
+import type { GameState } from './utils/types';
 
 // --- Параметры арены ---
 const ARENA_WIDTH = 2000;
@@ -19,45 +19,11 @@ const BALL_SACK_SIZE = 5; // ёмкость обоймы
 const FIRE_RATE_MS = 150; // интервал между шарами в обойме
 const RELOAD_TIME_MS = 1000; // полная перезарядка
 
-// --- Параметры врага "грунт" (стартовые, тюним после дня 4) ---
-const ENEMY_RADIUS = 18;
-const ENEMY_HP = 40; // 4 шара по 10 урона
-const ENEMY_SPEED = 90; // пикселей в секунду; в ~4.5 раза медленнее игрока
-const ENEMY_CONTACT_DAMAGE = 10; // урон игроку при касании
-
-/**
- * Создаёт несколько врагов-грунтов вокруг игрока для теста дня 4.
- * Расставлены на разных расстояниях, чтобы видеть как сходятся к центру.
- */
-function createEnemies(): Enemy[] {
-  const cx = ARENA_WIDTH / 2;
-  const cy = ARENA_HEIGHT / 2;
-
-  // Враги вокруг игрока на разных дистанциях:
-  //  - двое близко (≈250px) — атакуют первыми
-  //  - двое средне (≈400px) — догоняют
-  //  - один далеко (≈600px) — успеешь увидеть
-  const positions = [
-    { x: cx + 250, y: cy - 100 },
-    { x: cx - 250, y: cy + 100 },
-    { x: cx + 400, y: cy + 300 },
-    { x: cx - 400, y: cy - 300 },
-    { x: cx, y: cy - 600 },
-  ];
-
-  return positions.map((pos) => ({
-    position: pos,
-    radius: ENEMY_RADIUS,
-    hp: ENEMY_HP,
-    maxHp: ENEMY_HP,
-    speed: ENEMY_SPEED,
-    contactDamage: ENEMY_CONTACT_DAMAGE,
-  }));
-}
-
 /**
  * Создаёт начальное состояние игры.
  * Игрок ставится в центр арены, камера обнуляется (на первом кадре сцентрируется).
+ * Враги НЕ создаются здесь — этим занимается система волн (см. src/waves.ts).
+ * При старте: волна 1 в состоянии 'spawning', враги появятся в первом же кадре.
  */
 export function createInitialState(): GameState {
   const playerStartX = ARENA_WIDTH / 2;
@@ -97,6 +63,11 @@ export function createInitialState(): GameState {
       deltaTime: 0,
     },
     projectiles: [],
-    enemies: createEnemies(),
+    enemies: [],
+    waves: {
+      current: 1,
+      state: 'spawning',
+      betweenTimer: 0,
+    },
   };
 }

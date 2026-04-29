@@ -25,6 +25,17 @@ const PLAYER_HP_TEXT_FONT = '20px monospace';
 const PLAYER_HP_TEXT_X = 16;
 const PLAYER_HP_TEXT_Y = 28;
 
+// --- Текст номера волны (правый верхний угол) ---
+const WAVE_TEXT_COLOR = '#ffffff';
+const WAVE_TEXT_FONT = '20px monospace';
+const WAVE_TEXT_RIGHT_PADDING = 16;
+const WAVE_TEXT_Y = 28;
+
+// --- Экран победы ---
+const WIN_OVERLAY_COLOR = 'rgba(0, 0, 0, 0.7)';
+const WIN_TEXT_COLOR = '#ffe066';
+const WIN_TEXT_FONT = 'bold 64px monospace';
+
 // --- Подсветка игрока в i-frames (после получения урона) ---
 const PLAYER_IFRAMES_COLOR = '#ff5555'; // красноватый, пока неуязвим
 
@@ -145,16 +156,58 @@ function drawPlayer(ctx: CanvasRenderingContext2D, state: GameState): void {
 }
 
 /**
- * HUD дня 4 — простой текст с HP игрока.
- * Полноценный HUD (полоса, иконки) — день 6 недели 2.
+ * HUD дня 5 — HP игрока (слева) и номер волны (справа).
+ * Поверх всего: экран победы если waves.state === 'won'.
+ * Полноценный HUD (полоса, иконки бунов) — день 6 недели 2.
  */
 function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
+  const canvas = ctx.canvas;
+
+  // HP игрока (слева)
   ctx.fillStyle = PLAYER_HP_TEXT_COLOR;
   ctx.font = PLAYER_HP_TEXT_FONT;
   ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
   ctx.fillText(
     `HP: ${Math.max(0, Math.ceil(state.player.hp))} / ${state.player.maxHp}`,
     PLAYER_HP_TEXT_X,
     PLAYER_HP_TEXT_Y,
   );
+
+  // Номер волны (справа)
+  ctx.fillStyle = WAVE_TEXT_COLOR;
+  ctx.font = WAVE_TEXT_FONT;
+  ctx.textAlign = 'right';
+  ctx.fillText(
+    `Wave ${state.waves.current} / 5`,
+    canvas.width - WAVE_TEXT_RIGHT_PADDING,
+    WAVE_TEXT_Y,
+  );
+
+  // Экран победы
+  if (state.waves.state === 'won') {
+    drawWinScreen(ctx);
+  }
+
+  // Сбрасываем textAlign на дефолт, чтобы не повлиять на другой код
+  ctx.textAlign = 'left';
+}
+
+/**
+ * Полупрозрачная заливка + крупный текст "YOU WIN" по центру.
+ * Кнопка рестарта появится в дне 7.
+ */
+function drawWinScreen(ctx: CanvasRenderingContext2D): void {
+  const canvas = ctx.canvas;
+
+  ctx.fillStyle = WIN_OVERLAY_COLOR;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = WIN_TEXT_COLOR;
+  ctx.font = WIN_TEXT_FONT;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('YOU WIN', canvas.width / 2, canvas.height / 2);
+
+  ctx.textBaseline = 'alphabetic'; // вернуть дефолт
 }

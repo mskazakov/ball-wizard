@@ -6,6 +6,7 @@ import { updatePlayer } from './player';
 import { updateCamera } from './arena';
 import { updateProjectiles } from './projectiles';
 import { updateEnemies } from './enemies';
+import { updateWaves } from './waves';
 import { render } from './render';
 
 /**
@@ -27,6 +28,7 @@ export function startGame(
    * Один кадр игры. Браузер вызывает ~60 раз в секунду.
    */
   function frame(now: number): void {
+    
     // Обновляем время. deltaTime — мс с прошлого кадра.
     state.time.deltaTime = now - lastTime;
     state.time.now = now;
@@ -39,11 +41,15 @@ export function startGame(
     }
 
     // Обновление логики
-    // Порядок важен: сначала игрок (двигается), потом шары (стреляют из новой позиции),
-    // потом камера (следит за обновлённой позицией игрока).
+    // Порядок важен: сначала игрок (двигается), потом враги, потом шары
+    // (стреляют из обновлённой позиции игрока в обновлённую позицию врагов),
+    // потом cleanup (убираем мёртвых единым местом — единственный источник истины
+    // про "враг умер"), потом камера (следит за позицией игрока).
     updatePlayer(state);
     updateEnemies(state);
     updateProjectiles(state);
+    cleanupDead(state);
+    updateWaves(state);
     updateCamera(state);
 
     // Отрисовка
@@ -53,4 +59,16 @@ export function startGame(
   }
 
   requestAnimationFrame(frame);
+}
+
+/**
+ * Единое место удаления мёртвых сущностей. Вызывается раз за кадр
+ * после всех систем, которые могут наносить урон.
+ *
+ * Принцип: системы урона (шары, в будущем — ульта, контактный урон врагов)
+ * только проставляют hp -= damage. Удаление — здесь.
+ * Это позволяет добавлять новые источники урона, не дублируя фильтрацию.
+ */
+function cleanupDead(state: GameState): void {
+  state.enemies = state.enemies.filter((e) => e.hp > 0);
 }

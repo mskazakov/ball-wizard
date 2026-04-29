@@ -147,14 +147,15 @@ function moveProjectiles(state: GameState): void {
  * Проверяет каждый шар на пересечение с каждым врагом.
  * Шары, попавшие в цель, помечаются velocity={0,0} и удаляются в cleanup
  * (не удаляем во время итерации).
- * Мёртвые враги (hp<=0) тоже отфильтровываются здесь.
+ * Урон проставляется через e.hp -= damage. Удаление мёртвых врагов
+ * происходит в game.ts в фазе cleanup, не здесь.
  */
 function resolveHits(state: GameState): void {
   for (const proj of state.projectiles) {
     if (proj.velocity.x === 0 && proj.velocity.y === 0) continue; // уже отработал
 
     for (const e of state.enemies) {
-      if (e.hp <= 0) continue; // на удаление, пропускаем
+      if (e.hp <= 0) continue; // уже мёртвый, ждёт удаления
 
       const collisionRadius = proj.radius + e.radius;
       const dSq = distanceSquared(proj.position, e.position);
@@ -168,9 +169,6 @@ function resolveHits(state: GameState): void {
       break;
     }
   }
-
-  // Удаляем мёртвых врагов
-  state.enemies = state.enemies.filter((e) => e.hp > 0);
 }
 
 // ------------------------------------------------------------
