@@ -10,8 +10,10 @@ const ARENA_BORDER_COLOR = '#222222';
 const PLAYER_COLOR = '#ffffff';
 const ATTACK_RADIUS_COLOR = 'rgba(120, 200, 255, 0.25)'; // полупрозрачный голубой
 const PROJECTILE_COLOR = '#ffe066'; // жёлтый
-const ENEMY_COLOR = '#e74c3c'; // красный
+const ENEMY_GRUNT_COLOR = '#e74c3c'; // красный — грунт
+const ENEMY_SHOOTER_COLOR = '#9b59b6'; // фиолетовый — стрелок (визуально отличим от грунта)
 const ENEMY_FLASH_COLOR = '#ffffff'; // вспышка при попадании
+const ENEMY_PROJECTILE_COLOR = '#ff8c00'; // оранжевый — снаряд стрелка
 const ENEMY_HP_BG = '#222222';
 const ENEMY_HP_FG = '#2ecc71';
 const ENEMY_HP_GHOST = '#ffffff'; // белая полоса между реальным HP и ghost HP
@@ -109,8 +111,11 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
   // 4) Враги
   drawEnemies(ctx, state);
 
-  // 5) Шары
+  // 5) Шары игрока
   drawProjectiles(ctx, state);
+
+  // 5.5) Снаряды врагов
+  drawEnemyProjectiles(ctx, state);
 
   // 6) Игрок
   drawPlayer(ctx, state);
@@ -143,7 +148,8 @@ function drawEnemies(ctx: CanvasRenderingContext2D, state: GameState): void {
     const screen = worldToScreen(e.position, state);
 
     const isFlashing = state.time.now < e.flashUntil;
-    ctx.fillStyle = isFlashing ? ENEMY_FLASH_COLOR : ENEMY_COLOR;
+    const baseColor = e.kind === 'shooter' ? ENEMY_SHOOTER_COLOR : ENEMY_GRUNT_COLOR;
+    ctx.fillStyle = isFlashing ? ENEMY_FLASH_COLOR : baseColor;
     ctx.beginPath();
     ctx.arc(screen.x, screen.y, e.radius, 0, Math.PI * 2);
     ctx.fill();
@@ -168,11 +174,26 @@ function drawEnemies(ctx: CanvasRenderingContext2D, state: GameState): void {
 }
 
 /**
- * Рисует все активные шары как жёлтые круги.
+ * Рисует все активные шары игрока как жёлтые круги.
  */
 function drawProjectiles(ctx: CanvasRenderingContext2D, state: GameState): void {
   ctx.fillStyle = PROJECTILE_COLOR;
   for (const proj of state.projectiles) {
+    const screen = worldToScreen(proj.position, state);
+    ctx.beginPath();
+    ctx.arc(screen.x, screen.y, proj.radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/**
+ * Рисует снаряды врагов как оранжевые круги.
+ * Отдельная функция от drawProjectiles, чтобы не путать визуально:
+ * жёлтые шары — твои, оранжевые — летят в тебя.
+ */
+function drawEnemyProjectiles(ctx: CanvasRenderingContext2D, state: GameState): void {
+  ctx.fillStyle = ENEMY_PROJECTILE_COLOR;
+  for (const proj of state.enemyProjectiles) {
     const screen = worldToScreen(proj.position, state);
     ctx.beginPath();
     ctx.arc(screen.x, screen.y, proj.radius, 0, Math.PI * 2);

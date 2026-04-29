@@ -31,7 +31,7 @@ function init(): void {
     throw new Error('Не удалось получить 2D-контекст canvas');
   }
 
-  const state = createInitialState();
+  const state = createInitialState(canvas.width, canvas.height);
   setupInput(state, canvas);
 
   startGame(canvas, ctx, state);

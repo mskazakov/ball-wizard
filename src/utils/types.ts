@@ -46,6 +46,17 @@ export interface Camera {
   y: number;
 }
 
+/**
+ * Размер видимой области (canvas) в пикселях.
+ * Заполняется один раз при инициализации игры из реального canvas.
+ * Используется системами которым нужно знать "что видит игрок"
+ * (например спавн врагов за пределами кадра).
+ */
+export interface Viewport {
+  width: number;
+  height: number;
+}
+
 /** Состояние ввода. Обновляется обработчиками клавиатуры/мыши. */
 export interface InputState {
   keys: Set<string>;
@@ -66,16 +77,15 @@ export interface Projectile {
 }
 
 /**
- * Враг "грунт" — медленно идёт к игроку, наносит контактный урон.
- * Координаты — мировые.
+ * Общие поля любого врага. Поведение и параметры конкретного типа
+ * определяются конкретным интерфейсом-наследником через дискриминатор kind.
  */
-export interface Enemy {
+interface EnemyBase {
   position: Vec2;
   radius: number; // для отрисовки и коллизий
   hp: number;
   maxHp: number;
   speed: number; // пикселей в секунду
-  contactDamage: number; // урон игроку при касании
 
   // --- Hit feedback (день 6) ---
   /** До какого state.time.now враг подсвечен белым после попадания. */
@@ -90,6 +100,50 @@ export interface Enemy {
    * прибавляется к обычному движению. {0,0} = нет knockback.
    */
   knockbackVelocity: Vec2;
+}
+
+/**
+ * Враг "грунт" — медленно идёт к игроку, наносит контактный урон.
+ */
+export interface Grunt extends EnemyBase {
+  kind: 'grunt';
+  /** Урон игроку при касании. */
+  contactDamage: number;
+}
+
+/**
+ * Враг "стрелок" — держит дистанцию, стреляет снарядами.
+ *
+ * Поведение зависит от расстояния до игрока:
+ *   - дальше idealDistance: приближается со speed
+ *   - между keepDistance и idealDistance: стоит, стреляет
+ *   - ближе keepDistance: отступает со speed (кайтит), стреляет
+ *
+ * Контактного урона не наносит — только снаряды.
+ */
+export interface Shooter extends EnemyBase {
+  kind: 'shooter';
+  /** Дистанция на которой стрелок предпочитает стоять и стрелять. */
+  idealDistance: number;
+  /** Если игрок ближе этой дистанции — стрелок отступает (кайтит). */
+  keepDistance: number;
+  /** До какого state.time.now следующий выстрел невозможен (кулдаун). */
+  nextShotAt: number;
+}
+
+/** Любой враг. Дискриминатор kind определяет конкретный тип. */
+export type Enemy = Grunt | Shooter;
+
+/**
+ * Снаряд врага — летит по прямой с фиксированной скоростью, наносит урон
+ * игроку при попадании. Отдельный тип от Projectile (снарядов игрока),
+ * чтобы коллизии не путались — игрок vs шар игрока невозможно.
+ */
+export interface EnemyProjectile {
+  position: Vec2;
+  velocity: Vec2; // пикселей в секунду по каждой оси
+  radius: number;
+  damage: number;
 }
 
 /**
@@ -124,9 +178,12 @@ export interface GameState {
   player: Player;
   arena: Arena;
   camera: Camera;
+  viewport: Viewport;
   input: InputState;
   time: TimeState;
   projectiles: Projectile[];
+  /** Снаряды врагов (стрелки и т.д.). Отдельно от снарядов игрока. */
+  enemyProjectiles: EnemyProjectile[];
   enemies: Enemy[];
   waves: Waves;
   /** Глобальное состояние рана. См. RunState. */

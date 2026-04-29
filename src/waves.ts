@@ -1,41 +1,59 @@
 // src/waves.ts
 // Система волн: спавн врагов, переходы между волнами, состояние победы.
-// Машина состояний: spawning → fighting → between → spawning → ... → won
+// Машина состояний: spawning → fighting → between → spawning → ...
+// При победе на финальной волне ставит state.runState = 'won'.
 // Экспортирует: updateWaves — главная функция, вызывается раз за кадр.
 
-import type { GameState, Enemy, Vec2 } from './utils/types';
+import type { GameState, Grunt, Shooter, Vec2 } from './utils/types';
 
 // --- Параметры волн ---
 
 /** Количество врагов на каждой волне. Длина массива = MAX_WAVES. */
 const ENEMIES_PER_WAVE = [5, 8, 12, 16, 22];
 
-/** Максимальный номер волны. После победы на ней — игра выиграна. */
+/** Максимальный номер волны. */
 const MAX_WAVES = ENEMIES_PER_WAVE.length;
 
 /** Пауза между волнами в мс. */
 const BETWEEN_WAVE_DELAY_MS = 2000;
 
-/**
- * Запас спавна за пределами видимой области камеры.
- * Враг создаётся в случайной точке арены, расстояние от которой до края камеры
- * не меньше этой величины. Гарантирует "не появился прямо в лицо".
- */
+/** Запас спавна за пределами видимой области камеры. */
 const SPAWN_OFFSCREEN_MARGIN = 100;
 
-/** Параметры врага "грунт". Дублируют значения из старого state.ts. */
-const ENEMY_RADIUS = 18;
-const ENEMY_HP = 40;
-const ENEMY_SPEED = 90;
-const ENEMY_CONTACT_DAMAGE = 10;
+/** Сколько раз пробуем выбрать сторону камеры прежде чем перейти к fallback. */
+const SPAWN_SIDE_ATTEMPTS = 4;
+
+/**
+ * Доля стрелков в волне. Каждая волна выбирает случайное число из этого диапазона:
+ * 10–30% врагов — стрелки, остальное — грунты. Создаёт непредсказуемость.
+ * Волна 1 — без стрелков (см. SHOOTERS_START_FROM_WAVE).
+ */
+const SHOOTER_FRACTION_MIN = 0.1;
+const SHOOTER_FRACTION_MAX = 0.3;
+
+/**
+ * С какой волны стрелки начинают появляться. Волна 1 — только грунты,
+ * чтобы первая волна оставалась чистым обучением базовой механике.
+ */
+const SHOOTERS_START_FROM_WAVE = 2;
+
+// --- Параметры грунта ---
+const GRUNT_RADIUS = 18;
+const GRUNT_HP = 40;
+const GRUNT_SPEED = 90;
+const GRUNT_CONTACT_DAMAGE = 10;
+
+// --- Параметры стрелка ---
+const SHOOTER_RADIUS = 14;
+const SHOOTER_HP = 30;
+const SHOOTER_SPEED = 60;
+/** Дистанция на которой стрелок предпочитает стоять и стрелять. */
+const SHOOTER_IDEAL_DISTANCE = 350;
+/** Если игрок ближе этой дистанции — стрелок отступает (кайтит). */
+const SHOOTER_KEEP_DISTANCE = 250;
 
 /**
  * Главная функция системы волн. Вызывается раз за кадр из game.ts.
- * Машина состояний:
- *   spawning  — спавним всех врагов волны разом, переходим в fighting
- *   fighting  — ждём пока state.enemies опустеет
- *   between   — пауза BETWEEN_WAVE_DELAY_MS, потом следующая волна или won
- *   won       — финальное состояние, ничего не делаем
  */
 export function updateWaves(state: GameState): void {
   const w = state.waves;
@@ -48,11 +66,7 @@ export function updateWaves(state: GameState): void {
 
     case 'fighting':
       if (state.enemies.length === 0) {
-        // Все враги убиты
         if (w.current >= MAX_WAVES) {
-          // Финальная волна пройдена — игра выиграна.
-          // waves.state остаётся 'fighting' и больше не используется,
-          // потому что весь game loop останавливается по runState.
           state.runState = 'won';
         } else {
           w.state = 'between';
@@ -73,75 +87,188 @@ export function updateWaves(state: GameState): void {
 
 /**
  * Спавнит всех врагов текущей волны разом.
- * ТЕХДОЛГ: постепенный спавн в течение волны (как в Brotato).
- * Сейчас — все сразу для простоты.
+ * Состав: случайная доля стрелков (SHOOTER_FRACTION_MIN..MAX), остальное — грунты.
+ * Волна < SHOOTERS_START_FROM_WAVE — без стрелков.
+ *
+ * ТЕХДОЛГ: постепенный спавн в течение волны.
  */
 function spawnWave(state: GameState): void {
-  const count = ENEMIES_PER_WAVE[state.waves.current - 1];
+  const wave = state.waves.current;
+  const total = ENEMIES_PER_WAVE[wave - 1];
 
-  for (let i = 0; i < count; i++) {
-    state.enemies.push(createEnemy(pickSpawnPosition(state)));
+  const shooterFraction =
+    wave < SHOOTERS_START_FROM_WAVE
+      ? 0
+      : SHOOTER_FRACTION_MIN + Math.random() * (SHOOTER_FRACTION_MAX - SHOOTER_FRACTION_MIN);
+
+  const shooterCount = Math.round(total * shooterFraction);
+  const gruntCount = total - shooterCount;
+
+  for (let i = 0; i < gruntCount; i++) {
+    state.enemies.push(createGrunt(pickSpawnPosition(state)));
+  }
+  for (let i = 0; i < shooterCount; i++) {
+    state.enemies.push(createShooter(state, pickSpawnPosition(state)));
   }
 }
 
 /**
  * Выбирает точку спавна за пределами видимой камеры, но внутри арены.
- * Алгоритм: выбираем случайную сторону камеры (top/right/bottom/left),
- * затем случайную точку вдоль этой стороны со смещением SPAWN_OFFSCREEN_MARGIN
- * наружу. Если точка вылезает за арену — клампим в границы арены.
- *
- * Камера в этой версии = весь canvas (800x600), верхний левый угол в (cam.x, cam.y).
+ * Алгоритм: 4 случайные стороны → если все клампятся в кадр → fallback по расстоянию.
  */
 function pickSpawnPosition(state: GameState): Vec2 {
+  const sides = shuffledSides();
+
+  for (let i = 0; i < SPAWN_SIDE_ATTEMPTS; i++) {
+    const candidate = pickPositionOnSide(state, sides[i]);
+    if (isOutsideCamera(state, candidate)) {
+      return candidate;
+    }
+  }
+
+  return pickFallbackPosition(state);
+}
+
+/** Случайная перестановка [0,1,2,3] = top/right/bottom/left. */
+function shuffledSides(): number[] {
+  const sides = [0, 1, 2, 3];
+  for (let i = sides.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [sides[i], sides[j]] = [sides[j], sides[i]];
+  }
+  return sides;
+}
+
+/**
+ * Генерирует точку с указанной стороны камеры, со смещением SPAWN_OFFSCREEN_MARGIN
+ * наружу. Клампит в границы арены.
+ */
+function pickPositionOnSide(state: GameState, side: number): Vec2 {
   const camX = state.camera.x;
   const camY = state.camera.y;
-  const camW = 800; // ширина видимой области (= canvas)
-  const camH = 600;
-
+  const camW = state.viewport.width;
+  const camH = state.viewport.height;
   const arenaW = state.arena.width;
   const arenaH = state.arena.height;
 
-  const side = Math.floor(Math.random() * 4); // 0=top, 1=right, 2=bottom, 3=left
+  // Используем максимальный радиус всех типов врагов для клампа,
+  // чтобы враг любого типа не торчал за границу арены.
+  const margin = Math.max(GRUNT_RADIUS, SHOOTER_RADIUS);
+
   let x = 0;
   let y = 0;
 
   switch (side) {
-    case 0: // сверху
+    case 0:
       x = camX + Math.random() * camW;
       y = camY - SPAWN_OFFSCREEN_MARGIN;
       break;
-    case 1: // справа
+    case 1:
       x = camX + camW + SPAWN_OFFSCREEN_MARGIN;
       y = camY + Math.random() * camH;
       break;
-    case 2: // снизу
+    case 2:
       x = camX + Math.random() * camW;
       y = camY + camH + SPAWN_OFFSCREEN_MARGIN;
       break;
-    case 3: // слева
+    case 3:
       x = camX - SPAWN_OFFSCREEN_MARGIN;
       y = camY + Math.random() * camH;
       break;
   }
 
-  // Клампим в границы арены (на случай если игрок у края)
-  x = Math.max(ENEMY_RADIUS, Math.min(arenaW - ENEMY_RADIUS, x));
-  y = Math.max(ENEMY_RADIUS, Math.min(arenaH - ENEMY_RADIUS, y));
+  x = Math.max(margin, Math.min(arenaW - margin, x));
+  y = Math.max(margin, Math.min(arenaH - margin, y));
 
   return { x, y };
 }
 
-/** Создаёт одного врага-грунта в указанной точке. */
-function createEnemy(position: Vec2): Enemy {
+/** Точка строго за пределами камеры (с запасом на радиус самого большого врага). */
+function isOutsideCamera(state: GameState, p: Vec2): boolean {
+  const camX = state.camera.x;
+  const camY = state.camera.y;
+  const camW = state.viewport.width;
+  const camH = state.viewport.height;
+
+  const margin = Math.max(GRUNT_RADIUS, SHOOTER_RADIUS);
+  const left = camX - margin;
+  const right = camX + camW + margin;
+  const top = camY - margin;
+  const bottom = camY + camH + margin;
+
+  return p.x < left || p.x > right || p.y < top || p.y > bottom;
+}
+
+/** Fallback: случайная точка на арене на расстоянии > диагональ камеры от игрока. */
+function pickFallbackPosition(state: GameState): Vec2 {
+  const arenaW = state.arena.width;
+  const arenaH = state.arena.height;
+  const px = state.player.position.x;
+  const py = state.player.position.y;
+
+  const margin = Math.max(GRUNT_RADIUS, SHOOTER_RADIUS);
+  const camW = state.viewport.width;
+  const camH = state.viewport.height;
+  const minDist = Math.sqrt(camW * camW + camH * camH);
+  const minDistSq = minDist * minDist;
+
+  let last: Vec2 = { x: arenaW / 2, y: arenaH / 2 };
+
+  for (let i = 0; i < 20; i++) {
+    const x = margin + Math.random() * (arenaW - 2 * margin);
+    const y = margin + Math.random() * (arenaH - 2 * margin);
+    const dx = x - px;
+    const dy = y - py;
+    if (dx * dx + dy * dy >= minDistSq) {
+      return { x, y };
+    }
+    last = { x, y };
+  }
+
+  return last;
+}
+
+// ------------------------------------------------------------
+// Фабрики врагов
+// ------------------------------------------------------------
+
+/** Создаёт грунта в указанной точке. */
+function createGrunt(position: Vec2): Grunt {
   return {
+    kind: 'grunt',
     position,
-    radius: ENEMY_RADIUS,
-    hp: ENEMY_HP,
-    maxHp: ENEMY_HP,
-    speed: ENEMY_SPEED,
-    contactDamage: ENEMY_CONTACT_DAMAGE,
+    radius: GRUNT_RADIUS,
+    hp: GRUNT_HP,
+    maxHp: GRUNT_HP,
+    speed: GRUNT_SPEED,
+    contactDamage: GRUNT_CONTACT_DAMAGE,
     flashUntil: 0,
-    ghostHp: ENEMY_HP,
+    ghostHp: GRUNT_HP,
+    knockbackVelocity: { x: 0, y: 0 },
+  };
+}
+
+/**
+ * Создаёт стрелка в указанной точке.
+ * Первый выстрел — через случайный кулдаун от текущего времени, чтобы спавн-волна
+ * стрелков не выпустила залп синхронно.
+ */
+function createShooter(state: GameState, position: Vec2): Shooter {
+  // Случайная задержка первого выстрела от 500 до 2000мс
+  const firstShotDelay = 500 + Math.random() * 1500;
+
+  return {
+    kind: 'shooter',
+    position,
+    radius: SHOOTER_RADIUS,
+    hp: SHOOTER_HP,
+    maxHp: SHOOTER_HP,
+    speed: SHOOTER_SPEED,
+    idealDistance: SHOOTER_IDEAL_DISTANCE,
+    keepDistance: SHOOTER_KEEP_DISTANCE,
+    nextShotAt: state.time.now + firstShotDelay,
+    flashUntil: 0,
+    ghostHp: SHOOTER_HP,
     knockbackVelocity: { x: 0, y: 0 },
   };
 }

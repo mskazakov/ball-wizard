@@ -6,6 +6,7 @@ import { updatePlayer } from './player';
 import { updateCamera } from './arena';
 import { updateProjectiles } from './projectiles';
 import { updateEnemies } from './enemies';
+import { updateEnemyProjectiles } from './enemyProjectiles';
 import { updateWaves } from './waves';
 import { render } from './render';
 
@@ -46,6 +47,7 @@ export function startGame(
     if (state.runState === 'playing') {
       updatePlayer(state);
       updateEnemies(state);
+      updateEnemyProjectiles(state);
       updateProjectiles(state);
       cleanupDead(state);
       updateWaves(state);

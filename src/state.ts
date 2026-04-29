@@ -25,7 +25,7 @@ const RELOAD_TIME_MS = 1000; // полная перезарядка
  * Враги НЕ создаются здесь — этим занимается система волн (см. src/waves.ts).
  * При старте: волна 1 в состоянии 'spawning', враги появятся в первом же кадре.
  */
-export function createInitialState(): GameState {
+export function createInitialState(viewportWidth: number, viewportHeight: number): GameState {
   const playerStartX = ARENA_WIDTH / 2;
   const playerStartY = ARENA_HEIGHT / 2;
 
@@ -56,6 +56,10 @@ export function createInitialState(): GameState {
       x: 0,
       y: 0,
     },
+    viewport: {
+      width: viewportWidth,
+      height: viewportHeight,
+    },
     input: {
       keys: new Set<string>(),
     },
@@ -64,6 +68,7 @@ export function createInitialState(): GameState {
       deltaTime: 0,
     },
     projectiles: [],
+    enemyProjectiles: [],
     enemies: [],
     waves: {
       current: 1,
@@ -85,13 +90,16 @@ export function createInitialState(): GameState {
  * и при добавлении нового поля в GameState его не нужно дублировать здесь.
  */
 export function resetState(state: GameState): void {
-  const fresh = createInitialState();
+  // viewport не пересоздаём — он не меняется в течение жизни игры,
+  // передаём текущие значения чтобы createInitialState не упал.
+  const fresh = createInitialState(state.viewport.width, state.viewport.height);
 
   state.player = fresh.player;
   state.arena = fresh.arena;
   state.camera = fresh.camera;
   state.time = fresh.time;
   state.projectiles = fresh.projectiles;
+  state.enemyProjectiles = fresh.enemyProjectiles;
   state.enemies = fresh.enemies;
   state.waves = fresh.waves;
   state.runState = fresh.runState;
