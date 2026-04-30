@@ -4,7 +4,7 @@
 // При победе на финальной волне ставит state.runState = 'won'.
 // Экспортирует: updateWaves — главная функция, вызывается раз за кадр.
 
-import type { GameState, Grunt, Shooter, Vec2 } from './utils/types';
+import type { GameState, Grunt, Shooter, Rusher, Vec2 } from './utils/types';
 
 // --- Параметры волн ---
 
@@ -37,6 +37,22 @@ const SHOOTER_FRACTION_MAX = 0.3;
  */
 const SHOOTERS_START_FROM_WAVE = 2;
 
+/**
+ * Доля рашеров в волне. Рашеры — быстрая контактная угроза, появляются
+ * со случайной стороны. Доля выше чем у стрелков (стрелков 10-30%, рашеров
+ * 15-25%) потому что они должны давать постоянное давление, не разовые
+ * залпы. Меньше — игнорятся, больше — волна превращается в "только бегаешь".
+ */
+const RUSHER_FRACTION_MIN = 0.15;
+const RUSHER_FRACTION_MAX = 0.25;
+
+/**
+ * С какой волны рашеры начинают появляться. Волна 1 — обучение грунтам,
+ * волна 2 — стрелки, волна 3 — рашеры. Каждая волна добавляет одну новую
+ * угрозу, чтобы игрок успевал освоить тип прежде чем встретить следующий.
+ */
+const RUSHERS_START_FROM_WAVE = 3;
+
 // --- Параметры грунта ---
 const GRUNT_RADIUS = 18;
 const GRUNT_HP = 40;
@@ -51,6 +67,12 @@ const SHOOTER_SPEED = 60;
 const SHOOTER_IDEAL_DISTANCE = 350;
 /** Если игрок ближе этой дистанции — стрелок отступает (кайтит). */
 const SHOOTER_KEEP_DISTANCE = 250;
+
+// --- Параметры рашера ---
+const RUSHER_RADIUS = 12;
+const RUSHER_HP = 15;
+const RUSHER_SPEED = 220;
+const RUSHER_CONTACT_DAMAGE = 15;
 
 /**
  * Главная функция системы волн. Вызывается раз за кадр из game.ts.
@@ -87,8 +109,13 @@ export function updateWaves(state: GameState): void {
 
 /**
  * Спавнит всех врагов текущей волны разом.
- * Состав: случайная доля стрелков (SHOOTER_FRACTION_MIN..MAX), остальное — грунты.
- * Волна < SHOOTERS_START_FROM_WAVE — без стрелков.
+ * Состав:
+ *   - стрелки (с волны SHOOTERS_START_FROM_WAVE): доля случайная в [SHOOTER_FRACTION_MIN, MAX]
+ *   - рашеры (с волны RUSHERS_START_FROM_WAVE): доля случайная в [RUSHER_FRACTION_MIN, MAX]
+ *   - остальное — грунты
+ *
+ * Доли считаются от total. Если на ранней волне сумма долей даёт 0 рашеров —
+ * это нормально, так и задумано (плавное введение типов по волнам).
  *
  * ТЕХДОЛГ: постепенный спавн в течение волны.
  */
@@ -101,14 +128,24 @@ function spawnWave(state: GameState): void {
       ? 0
       : SHOOTER_FRACTION_MIN + Math.random() * (SHOOTER_FRACTION_MAX - SHOOTER_FRACTION_MIN);
 
+  const rusherFraction =
+    wave < RUSHERS_START_FROM_WAVE
+      ? 0
+      : RUSHER_FRACTION_MIN + Math.random() * (RUSHER_FRACTION_MAX - RUSHER_FRACTION_MIN);
+
   const shooterCount = Math.round(total * shooterFraction);
-  const gruntCount = total - shooterCount;
+  const rusherCount = Math.round(total * rusherFraction);
+  // Грунты — остаток. Math.max на случай если округление съело больше total.
+  const gruntCount = Math.max(0, total - shooterCount - rusherCount);
 
   for (let i = 0; i < gruntCount; i++) {
     state.enemies.push(createGrunt(pickSpawnPosition(state)));
   }
   for (let i = 0; i < shooterCount; i++) {
     state.enemies.push(createShooter(state, pickSpawnPosition(state)));
+  }
+  for (let i = 0; i < rusherCount; i++) {
+    state.enemies.push(createRusher(pickSpawnPosition(state)));
   }
 }
 
@@ -269,6 +306,22 @@ function createShooter(state: GameState, position: Vec2): Shooter {
     nextShotAt: state.time.now + firstShotDelay,
     flashUntil: 0,
     ghostHp: SHOOTER_HP,
+    knockbackVelocity: { x: 0, y: 0 },
+  };
+}
+
+/** Создаёт рашера в указанной точке. */
+function createRusher(position: Vec2): Rusher {
+  return {
+    kind: 'rusher',
+    position,
+    radius: RUSHER_RADIUS,
+    hp: RUSHER_HP,
+    maxHp: RUSHER_HP,
+    speed: RUSHER_SPEED,
+    contactDamage: RUSHER_CONTACT_DAMAGE,
+    flashUntil: 0,
+    ghostHp: RUSHER_HP,
     knockbackVelocity: { x: 0, y: 0 },
   };
 }

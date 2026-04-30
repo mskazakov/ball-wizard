@@ -2,7 +2,7 @@
 // Логика врагов: AI движения, стрельба стрелков, контактный урон игроку.
 // Экспортирует: updateEnemies — главная функция, вызывается каждый кадр.
 
-import type { GameState, Enemy, Grunt, Shooter, Vec2, EnemyProjectile } from './utils/types';
+import type { GameState, Enemy, Grunt, Shooter, Rusher, Vec2, EnemyProjectile } from './utils/types';
 import { distanceSquared, normalize, subtract } from './utils/math';
 
 // --- I-frames игрока ---
@@ -51,6 +51,8 @@ export function updateEnemies(state: GameState): void {
 /**
  * Каждый враг двигается согласно своему AI.
  * Knockback применяется поверх любого движения, одинаково для всех типов.
+ * После всех движений позиция клампится в границы арены — иначе стрелок
+ * при кайтинге может уйти за карту, а будущие рашеры — улететь от удара.
  */
 function moveEnemies(state: GameState): void {
   const dtSec = state.time.deltaTime / 1000;
@@ -78,6 +80,19 @@ function moveEnemies(state: GameState): void {
       enemy.knockbackVelocity.x = 0;
       enemy.knockbackVelocity.y = 0;
     }
+
+    // 5) Кламп в границы арены с учётом радиуса врага.
+    //    Враг — круг, центр должен быть не ближе radius к границе.
+    enemy.position.x = clamp(
+      enemy.position.x,
+      enemy.radius,
+      state.arena.width - enemy.radius
+    );
+    enemy.position.y = clamp(
+      enemy.position.y,
+      enemy.radius,
+      state.arena.height - enemy.radius
+    );
   }
 }
 
@@ -88,14 +103,16 @@ function moveEnemies(state: GameState): void {
 function getAiVelocity(enemy: Enemy, state: GameState): Vec2 {
   switch (enemy.kind) {
     case 'grunt':
-      return getGruntVelocity(enemy, state);
+    case 'rusher':
+      // Грунт и рашер: тупо идут к игроку. Различие только в параметрах.
+      return getChaseVelocity(enemy, state);
     case 'shooter':
       return getShooterVelocity(enemy, state);
   }
 }
 
-/** Грунт: тупо идёт к игроку. */
-function getGruntVelocity(enemy: Grunt, state: GameState): Vec2 {
+/** Преследование: враг идёт к игроку со своей speed. Используется грунтом и рашером. */
+function getChaseVelocity(enemy: Grunt | Rusher, state: GameState): Vec2 {
   const dir = directionTo(enemy.position, state.player.position);
   return { x: dir.x * enemy.speed, y: dir.y * enemy.speed };
 }
@@ -197,7 +214,8 @@ function resolveContactDamage(state: GameState): void {
   const playerHalf = player.size / 2;
 
   for (const enemy of state.enemies) {
-    if (enemy.kind !== 'grunt') continue;
+    // Стрелок не наносит контактный урон — by design (см. DECISIONS).
+    if (enemy.kind === 'shooter') continue;
     if (!isContacting(enemy, player.position, playerHalf)) continue;
 
     player.hp -= enemy.contactDamage;

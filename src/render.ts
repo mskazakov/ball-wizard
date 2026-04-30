@@ -12,6 +12,7 @@ const ATTACK_RADIUS_COLOR = 'rgba(120, 200, 255, 0.25)'; // полупрозра
 const PROJECTILE_COLOR = '#ffe066'; // жёлтый
 const ENEMY_GRUNT_COLOR = '#e74c3c'; // красный — грунт
 const ENEMY_SHOOTER_COLOR = '#9b59b6'; // фиолетовый — стрелок (визуально отличим от грунта)
+const ENEMY_RUSHER_COLOR = '#f39c12'; // жёлто-оранжевый — рашер (заметно отличается от грунта и стрелка)
 const ENEMY_FLASH_COLOR = '#ffffff'; // вспышка при попадании
 const ENEMY_PROJECTILE_COLOR = '#ff8c00'; // оранжевый — снаряд стрелка
 const ENEMY_HP_BG = '#222222';
@@ -148,7 +149,7 @@ function drawEnemies(ctx: CanvasRenderingContext2D, state: GameState): void {
     const screen = worldToScreen(e.position, state);
 
     const isFlashing = state.time.now < e.flashUntil;
-    const baseColor = e.kind === 'shooter' ? ENEMY_SHOOTER_COLOR : ENEMY_GRUNT_COLOR;
+    const baseColor = getEnemyColor(e.kind);
     ctx.fillStyle = isFlashing ? ENEMY_FLASH_COLOR : baseColor;
     ctx.beginPath();
     ctx.arc(screen.x, screen.y, e.radius, 0, Math.PI * 2);
@@ -347,4 +348,19 @@ function drawDamageFlash(ctx: CanvasRenderingContext2D, state: GameState): void 
   const canvas = ctx.canvas;
   ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+/**
+ * Цвет круга врага по типу. Хелпер чтобы drawEnemies не превращался в гнездо тернарников.
+ * При добавлении нового типа врага — добавляем один case, TypeScript заставит обработать.
+ */
+function getEnemyColor(kind: 'grunt' | 'shooter' | 'rusher'): string {
+  switch (kind) {
+    case 'grunt':
+      return ENEMY_GRUNT_COLOR;
+    case 'shooter':
+      return ENEMY_SHOOTER_COLOR;
+    case 'rusher':
+      return ENEMY_RUSHER_COLOR;
+  }
 }

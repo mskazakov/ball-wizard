@@ -131,8 +131,22 @@ export interface Shooter extends EnemyBase {
   nextShotAt: number;
 }
 
+/**
+ * Враг "рашер" — быстрый, малое HP, бежит на игрока. Спавнится со случайной
+ * стороны, при 3-4 рашерах в волне с высокой вероятностью атакует с разных
+ * направлений — игрок не может стабильно убегать по прямой.
+ *
+ * AI идентичен грунту (тупо normalize(player - self)), отличие — параметры.
+ * Контактный урон выше грунта, скорость заметно выше.
+ */
+export interface Rusher extends EnemyBase {
+  kind: 'rusher';
+  /** Урон игроку при касании. */
+  contactDamage: number;
+}
+
 /** Любой враг. Дискриминатор kind определяет конкретный тип. */
-export type Enemy = Grunt | Shooter;
+export type Enemy = Grunt | Shooter | Rusher;
 
 /**
  * Снаряд врага — летит по прямой с фиксированной скоростью, наносит урон
