@@ -5,6 +5,7 @@
 import type { GameState } from './utils/types';
 import { resetState } from './state';
 import { getRestartButtonRect } from './render';
+import { confirmLevelUp } from './xp';
 
 /**
  * Навешивает обработчики ввода:
@@ -37,15 +38,30 @@ export function setupInput(state: GameState, canvas: HTMLCanvasElement): void {
 }
 
 /**
- * Обрабатывает клик по canvas. Сейчас — только кнопка рестарта.
- * Кнопка активна только когда игра остановлена (won или gameOver).
+ * Обрабатывает клик по canvas.
+ *
+ * Сейчас обрабатывается:
+ *   - 'won' / 'gameOver': клик по кнопке RESTART → resetState
+ *   - 'levelup':           клик по кнопке CONTINUE → confirmLevelUp (повышает уровень)
+ *
+ * Геометрия кнопки одна (getRestartButtonRect) и в render все три экрана
+ * её переиспользуют через drawCenterButton с разными лейблами.
  *
  * Координаты клика переводим из системы страницы в систему canvas
  * через getBoundingClientRect — иначе при отступах/масштабе попадёт мимо.
+ *
+ * День 4 недели 2: на 'levelup' будет 3 кнопки бунов, тут появится
+ * отдельная getBoonButtonRects и логика выбора.
  */
 function handleCanvasClick(e: MouseEvent, state: GameState, canvas: HTMLCanvasElement): void {
-  // Кнопка показывается только в этих состояниях
-  if (state.runState !== 'won' && state.runState !== 'gameOver') return;
+  // Кнопка по центру показывается только в этих состояниях
+  if (
+    state.runState !== 'won' &&
+    state.runState !== 'gameOver' &&
+    state.runState !== 'levelup'
+  ) {
+    return;
+  }
 
   const rect = canvas.getBoundingClientRect();
   const clickX = e.clientX - rect.left;
@@ -58,7 +74,12 @@ function handleCanvasClick(e: MouseEvent, state: GameState, canvas: HTMLCanvasEl
     clickY >= btn.y &&
     clickY <= btn.y + btn.h;
 
-  if (isInside) {
+  if (!isInside) return;
+
+  // Развилка по состоянию: одна и та же кнопка делает разные действия.
+  if (state.runState === 'levelup') {
+    confirmLevelUp(state);
+  } else {
     resetState(state);
   }
 }

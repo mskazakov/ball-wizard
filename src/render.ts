@@ -30,6 +30,21 @@ const PLAYER_HP_TEXT_FONT = '20px monospace';
 const PLAYER_HP_TEXT_X = 16;
 const PLAYER_HP_TEXT_Y = 28;
 
+// --- XP-бар сверху экрана (на всю ширину) ---
+/** Высота полосы в пикселях. Тонкая, чтобы не отъедать игровое поле. */
+const XP_BAR_HEIGHT = 6;
+/** Цвет фона xp-бара — приглушённый, не отвлекает периферию. */
+const XP_BAR_BG = '#1a1a2e';
+/** Цвет заполнения — голубой, контрастно к зелёным HP-барам и красным/оранжевым врагам. */
+const XP_BAR_FG = '#4ec9ff';
+/**
+ * Отступ "Lv N" от xp-бара. Уровень рисуется по центру под полосой,
+ * мелким шрифтом — нужен только когда захочешь свериться, не лезет в глаз.
+ */
+const LEVEL_TEXT_COLOR = '#ffffff';
+const LEVEL_TEXT_FONT = '14px monospace';
+const LEVEL_TEXT_OFFSET_Y = 4; // сколько px ниже xp-бара
+
 // --- Текст номера волны (правый верхний угол) ---
 const WAVE_TEXT_COLOR = '#ffffff';
 const WAVE_TEXT_FONT = '20px monospace';
@@ -40,6 +55,18 @@ const WAVE_TEXT_Y = 28;
 const WIN_OVERLAY_COLOR = 'rgba(0, 0, 0, 0.7)';
 const WIN_TEXT_COLOR = '#ffe066';
 const WIN_TEXT_FONT = 'bold 64px monospace';
+
+// --- Экран левелапа ---
+const LEVELUP_OVERLAY_COLOR = 'rgba(0, 20, 40, 0.7)';
+const LEVELUP_TEXT_COLOR = '#4ec9ff';
+const LEVELUP_TEXT_FONT = 'bold 64px monospace';
+/** Подзаголовок под "LEVEL UP" — показывает на какой уровень переходим. */
+const LEVELUP_SUBTITLE_COLOR = '#ffffff';
+const LEVELUP_SUBTITLE_FONT = '20px monospace';
+const LEVELUP_SUBTITLE_OFFSET_Y = 30; // ниже заголовка
+
+// --- Кнопка Continue (на экране левелапа) ---
+const CONTINUE_BTN_LABEL = 'CONTINUE';
 
 // --- Экран Game Over ---
 const GAMEOVER_OVERLAY_COLOR = 'rgba(40, 0, 0, 0.7)';
@@ -222,6 +249,10 @@ function drawPlayer(ctx: CanvasRenderingContext2D, state: GameState): void {
 function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
   const canvas = ctx.canvas;
 
+  // XP-бар сверху на всю ширину (день 3 недели 2).
+  // Рисуется первым в HUD, потому что его место — самый верх экрана.
+  drawXpBar(ctx, state);
+
   // HP игрока (слева)
   ctx.fillStyle = PLAYER_HP_TEXT_COLOR;
   ctx.font = PLAYER_HP_TEXT_FONT;
@@ -249,10 +280,91 @@ function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
     drawWinScreen(ctx);
   } else if (state.runState === 'gameOver') {
     drawGameOverScreen(ctx);
+  } else if (state.runState === 'levelup') {
+    drawLevelUpScreen(ctx, state);
   }
 
   // Сбрасываем textAlign на дефолт, чтобы не повлиять на другой код
   ctx.textAlign = 'left';
+}
+
+/**
+ * XP-бар на всю ширину canvas, у самого верха экрана.
+ * Под ним — мелким текстом по центру "Lv N" (для редкой проверки уровня,
+ * не отвлекает периферию во время боя).
+ *
+ * Полоса заполняется от 0 до xpToNextLevel. В состоянии 'levelup'
+ * полоса визуально полная (xp >= xpToNextLevel) — клампим до 1, чтобы
+ * не вылезала за пределы при xp > порога (например после убийства стрелка
+ * с порога 2/2 → 5/2).
+ */
+function drawXpBar(ctx: CanvasRenderingContext2D, state: GameState): void {
+  const canvas = ctx.canvas;
+  const player = state.player;
+
+  // Фон полосы
+  ctx.fillStyle = XP_BAR_BG;
+  ctx.fillRect(0, 0, canvas.width, XP_BAR_HEIGHT);
+
+  // Заполнение
+  const ratio = Math.min(1, player.xp / player.xpToNextLevel);
+  ctx.fillStyle = XP_BAR_FG;
+  ctx.fillRect(0, 0, canvas.width * ratio, XP_BAR_HEIGHT);
+
+  // Уровень текстом по центру под полосой
+  ctx.fillStyle = LEVEL_TEXT_COLOR;
+  ctx.font = LEVEL_TEXT_FONT;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText(
+    `Lv ${player.level}`,
+    canvas.width / 2,
+    XP_BAR_HEIGHT + LEVEL_TEXT_OFFSET_Y,
+  );
+}
+
+/**
+ * Экран левелапа: оверлей + "LEVEL UP" + подзаголовок "Lv N → N+1" + кнопка Continue.
+ * День 3 недели 2: только заглушка-кнопка, выбора бунов нет.
+ * День 4 недели 2: вместо одной кнопки — 3 кнопки с бунами.
+ *
+ * Хитбокс кнопки — тот же getRestartButtonRect, label другой. Это сознательное
+ * переиспользование: одна кнопка по центру = одна геометрия. Когда в дне 4
+ * появятся 3 кнопки, тут будет своя getBoonButtonRects.
+ */
+function drawLevelUpScreen(ctx: CanvasRenderingContext2D, state: GameState): void {
+  const canvas = ctx.canvas;
+
+  ctx.fillStyle = LEVELUP_OVERLAY_COLOR;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = LEVELUP_TEXT_COLOR;
+  ctx.font = LEVELUP_TEXT_FONT;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('LEVEL UP', canvas.width / 2, canvas.height / 2 - 40);
+
+  // Подзаголовок: текущий уровень и сколько ещё выборов осталось.
+  // Уровень уже повышен в момент набора xp (см. grantXp), здесь только
+  // подтверждение буна. День 4: будет 3 кнопки бунов вместо одной.
+  ctx.fillStyle = LEVELUP_SUBTITLE_COLOR;
+  ctx.font = LEVELUP_SUBTITLE_FONT;
+  const pending = state.player.pendingLevelUps;
+  const subtitle =
+    pending > 1
+      ? `Lv ${state.player.level} — choose boon (${pending} pending)`
+      : `Lv ${state.player.level} — choose boon`;
+  ctx.fillText(
+    subtitle,
+    canvas.width / 2,
+    canvas.height / 2 - 40 + LEVELUP_SUBTITLE_OFFSET_Y,
+  );
+
+  // Кнопка Continue — переиспользуем геометрию кнопки рестарта.
+  // День 4: заменим на 3 кнопки бунов.
+  drawCenterButton(ctx, CONTINUE_BTN_LABEL);
+
+  ctx.textBaseline = 'alphabetic';
 }
 
 /**
@@ -271,7 +383,7 @@ function drawWinScreen(ctx: CanvasRenderingContext2D): void {
   ctx.textBaseline = 'middle';
   ctx.fillText('YOU WIN', canvas.width / 2, canvas.height / 2 - 40);
 
-  drawRestartButton(ctx);
+  drawCenterButton(ctx, RESTART_BTN_LABEL);
 
   ctx.textBaseline = 'alphabetic'; // вернуть дефолт
 }
@@ -291,17 +403,17 @@ function drawGameOverScreen(ctx: CanvasRenderingContext2D): void {
   ctx.textBaseline = 'middle';
   ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 40);
 
-  drawRestartButton(ctx);
+  drawCenterButton(ctx, RESTART_BTN_LABEL);
 
   ctx.textBaseline = 'alphabetic'; // вернуть дефолт
 }
 
 /**
- * Рисует белую кнопку "RESTART" по центру, ниже заголовка экрана.
- * Хитбокс кнопки считается отдельной функцией getRestartButtonRect —
- * её зовёт обработчик клика, чтобы знать куда мы тыкнули.
+ * Рисует белую кнопку с произвольным лейблом по центру (ниже заголовка экрана).
+ * Используется для RESTART (на 'won'/'gameOver') и CONTINUE (на 'levelup').
+ * Геометрия одна — getRestartButtonRect — поэтому хитбокс клика общий.
  */
-function drawRestartButton(ctx: CanvasRenderingContext2D): void {
+function drawCenterButton(ctx: CanvasRenderingContext2D, label: string): void {
   const rect = getRestartButtonRect(ctx.canvas);
 
   ctx.fillStyle = RESTART_BTN_BG;
@@ -311,7 +423,7 @@ function drawRestartButton(ctx: CanvasRenderingContext2D): void {
   ctx.font = RESTART_BTN_FONT;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(RESTART_BTN_LABEL, rect.x + rect.w / 2, rect.y + rect.h / 2);
+  ctx.fillText(label, rect.x + rect.w / 2, rect.y + rect.h / 2);
 }
 
 /**

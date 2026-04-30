@@ -58,6 +58,8 @@ const GRUNT_RADIUS = 18;
 const GRUNT_HP = 40;
 const GRUNT_SPEED = 90;
 const GRUNT_CONTACT_DAMAGE = 10;
+/** Опыт за убийство грунта. Базовая массовка — мало xp. */
+const GRUNT_XP_REWARD = 1;
 
 // --- Параметры стрелка ---
 const SHOOTER_RADIUS = 14;
@@ -67,12 +69,20 @@ const SHOOTER_SPEED = 60;
 const SHOOTER_IDEAL_DISTANCE = 350;
 /** Если игрок ближе этой дистанции — стрелок отступает (кайтит). */
 const SHOOTER_KEEP_DISTANCE = 250;
+/** Опыт за убийство стрелка. Самая опасная цель → больше xp, поощряет приоритет. */
+const SHOOTER_XP_REWARD = 3;
 
 // --- Параметры рашера ---
 const RUSHER_RADIUS = 12;
 const RUSHER_HP = 15;
 const RUSHER_SPEED = 220;
 const RUSHER_CONTACT_DAMAGE = 15;
+/**
+ * Опыт за убийство рашера. Умирает с 2 шаров (быстрый фарм), но опасен —
+ * 2 xp золотая середина: чуть выше грунта (1), но меньше стрелка (3),
+ * чтобы рашер не стал лучшим способом фармить xp за счёт низкого HP.
+ */
+const RUSHER_XP_REWARD = 2;
 
 /**
  * Главная функция системы волн. Вызывается раз за кадр из game.ts.
@@ -88,7 +98,15 @@ export function updateWaves(state: GameState): void {
 
     case 'fighting':
       if (state.enemies.length === 0) {
-        if (w.current >= MAX_WAVES) {
+        // Если есть невыбранные левелапы — приоритет им, не победа и не таймер.
+        // Игрок должен подтвердить все левелапы прежде чем игра двинется дальше.
+        if (state.player.pendingLevelUps > 0) {
+          state.runState = 'levelup';
+          // Не меняем w.state: остаёмся в 'fighting', чтобы confirmLevelUp
+          // знал "это был финальный бой, ставь 'won' после последнего CONTINUE".
+          // Если это не финальная волна — после confirmLevelUp вернёмся сюда,
+          // и эта же ветка переведёт в 'between'.
+        } else if (w.current >= MAX_WAVES) {
           state.runState = 'won';
         } else {
           w.state = 'between';
@@ -98,6 +116,14 @@ export function updateWaves(state: GameState): void {
       break;
 
     case 'between':
+      // Между волнами: если есть невыбранные левелапы — пауза левелап-экраном,
+      // таймер НЕ тикает. Это решение из дня 3 недели 2: левелап обязателен
+      // для перехода к следующей волне (МВП правило "не выбрал апдейт — не идёшь").
+      if (state.player.pendingLevelUps > 0) {
+        state.runState = 'levelup';
+        break;
+      }
+
       w.betweenTimer -= state.time.deltaTime;
       if (w.betweenTimer <= 0) {
         w.current += 1;
@@ -282,6 +308,7 @@ function createGrunt(position: Vec2): Grunt {
     flashUntil: 0,
     ghostHp: GRUNT_HP,
     knockbackVelocity: { x: 0, y: 0 },
+    xpReward: GRUNT_XP_REWARD,
   };
 }
 
@@ -307,6 +334,7 @@ function createShooter(state: GameState, position: Vec2): Shooter {
     flashUntil: 0,
     ghostHp: SHOOTER_HP,
     knockbackVelocity: { x: 0, y: 0 },
+    xpReward: SHOOTER_XP_REWARD,
   };
 }
 
@@ -323,5 +351,6 @@ function createRusher(position: Vec2): Rusher {
     flashUntil: 0,
     ghostHp: RUSHER_HP,
     knockbackVelocity: { x: 0, y: 0 },
+    xpReward: RUSHER_XP_REWARD,
   };
 }

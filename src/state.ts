@@ -19,6 +19,18 @@ const BALL_SACK_SIZE = 5; // ёмкость обоймы
 const FIRE_RATE_MS = 150; // интервал между шарами в обойме
 const RELOAD_TIME_MS = 1000; // полная перезарядка
 
+// --- Прогрессия (день 3 недели 2) ---
+/** Стартовый уровень игрока. */
+const PLAYER_START_LEVEL = 1;
+/**
+ * Сколько xp нужно для перехода с уровня 1 на уровень 2.
+ * Brotato-style кривая: на каждом уровне порог растёт на 1 относительно предыдущего шага.
+ * Уровни 1→2: 2, 2→3: 4 (2+2), 3→4: 7 (4+3), 4→5: 11 (7+4), 5→6: 16 (11+5), ...
+ * Формула шага: xpToNextLevel(L) = xpToNextLevel(L-1) + (L+1)
+ * См. computeNextXpThreshold в src/xp.ts (появится далее).
+ */
+const PLAYER_XP_TO_LEVEL_2 = 2;
+
 /**
  * Создаёт начальное состояние игры.
  * Игрок ставится в центр арены, камера обнуляется (на первом кадре сцентрируется).
@@ -47,6 +59,12 @@ export function createInitialState(viewportWidth: number, viewportHeight: number
       maxHp: PLAYER_MAX_HP,
       iFramesUntil: 0,
       redFlashUntil: 0,
+
+      // --- Прогрессия ---
+      level: PLAYER_START_LEVEL,
+      xp: 0,
+      xpToNextLevel: PLAYER_XP_TO_LEVEL_2,
+      pendingLevelUps: 0,
     },
     arena: {
       width: ARENA_WIDTH,
