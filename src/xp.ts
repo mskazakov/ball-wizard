@@ -7,7 +7,8 @@
 //   - grantXp: начисляет xp игроку, при превышении порога переводит ран в 'levelup'
 //   - computeNextXpThreshold: формула порога для следующего уровня
 
-import type { GameState } from './utils/types';
+import type { BoonId, GameState } from './utils/types';
+import { applyBoon, getRandomBoonChoices } from './boons';
 
 /**
  * Должна совпадать с MAX_WAVES в waves.ts. Дублируем здесь намеренно:
@@ -66,28 +67,40 @@ export function grantXp(state: GameState, amount: number): void {
 }
 
 /**
- * Подтверждение одного отложенного левелапа. Вызывается когда игрок нажал
- * Continue на экране между волнами.
+ * Подтверждение одного отложенного левелапа. Вызывается когда игрок выбрал
+ * один из 3 бунов на экране между волнами.
  *
  * НЕ повышает player.level — он уже повышен в grantXp в момент набора xp.
- * Здесь только:
- *   1) декрементит pendingLevelUps
- *   2) если ещё остались — runState='levelup', сразу следующий экран
- *   3) если все разгребены — определяем куда возвращаться:
+ * Здесь:
+ *   1) применяет выбранный буну (мутирует поля игрока, пишет в state.boons)
+ *   2) очищает state.currentBoonChoices — для следующего экрана waves.ts
+ *      сгенерирует новые 3 буна
+ *   3) декрементит pendingLevelUps
+ *   4) если ещё остались — runState='levelup', сразу следующий экран
+ *   5) если все разгребены — определяем куда возвращаться:
  *      - финальная волна закрыта без врагов → 'won' (отложенная победа)
  *      - иначе → 'playing'
- *
- * День 4 этой недели: сюда добавится применение выбранного буна
- * (модификация атаки/HP/скорости/etc).
  */
-export function confirmLevelUp(state: GameState): void {
+export function confirmLevelUp(state: GameState, chosenBoon: BoonId): void {
   const player = state.player;
+
+  applyBoon(state, chosenBoon);
 
   player.pendingLevelUps -= 1;
 
   if (player.pendingLevelUps > 0) {
-    return; // остаёмся в 'levelup', следующий экран сам отрисуется
+    // Остаёмся в 'levelup' для следующего экрана. Сразу генерим новые
+    // буны — в waves.ts генерация только при ВХОДЕ в 'levelup', а мы из
+    // него не выходим. Без этой строки следующий экран был бы пустой.
+    // Длина пула — та же что в waves.ts (3), захардкожена дважды.
+    // Техдолг: при появлении третьего использования вынести в utils/constants.
+    state.currentBoonChoices = getRandomBoonChoices(3);
+    return;
   }
+
+  // Все pending разгребены — экран левелапа закрывается, чистим choices,
+  // чтобы следующий заход в 'levelup' (новая волна) сгенерил с нуля.
+  state.currentBoonChoices = null;
 
   // Последний левелап подтверждён. Куда возвращаемся?
   // Если волны кончились и врагов нет — это была отложенная победа.

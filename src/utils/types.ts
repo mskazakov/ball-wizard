@@ -24,6 +24,13 @@ export interface Player {
   reloadTime: number; // мс на полную перезарядку
   reloadProgress: number; // 0..reloadTime; -1 если сейчас не перезаряжаемся
 
+/**
+   * Множитель урона от бунов. Стартовое значение — 1. Буну "More damage"
+   * прибавляет 0.25 (аддитивно, по решению дня 4 недели 2).
+   * Шары при создании читают BASE_DAMAGE * player.damageMultiplier.
+   */
+  damageMultiplier: number;
+
   // --- Здоровье ---
   hp: number; // текущее здоровье
   maxHp: number; // максимальное здоровье
@@ -214,6 +221,32 @@ export interface Waves {
  */
 export type RunState = 'playing' | 'levelup' | 'won' | 'gameOver';
 
+/**
+ * Идентификатор буна. Расширяется по мере добавления новых бунов.
+ * День 4 недели 2: только 'more_damage'.
+ */
+export type BoonId = 'more_damage';
+
+/**
+ * Описание буна — статичные данные (имя, эффект). Список всех BoonDefinition
+ * лежит в src/boons.ts, индексируется по BoonId.
+ */
+export interface BoonDefinition {
+  id: BoonId;
+  /** Короткое имя для кнопки на экране левелапа. */
+  name: string;
+  /** Описание эффекта одной строкой, под именем на кнопке. */
+  description: string;
+}
+
+/**
+ * Запись о взятом буне. Сейчас только id, но структура объектная — чтобы
+ * позже добавить поля типа stackCount или takenAtLevel без миграций.
+ */
+export interface AppliedBoon {
+  id: BoonId;
+}
+
 /** Главный объект состояния игры. Передаётся во все системы. */
 export interface GameState {
   player: Player;
@@ -229,4 +262,18 @@ export interface GameState {
   waves: Waves;
   /** Глобальное состояние рана. См. RunState. */
   runState: RunState;
+  /**
+   * Журнал взятых бунов в текущем ране. Эффекты применены сразу к state
+   * (например player.damageMultiplier), массив используется для HUD
+   * (иконки бунов) и для понимания "что игрок собрал".
+   * Очищается при resetState через пересоздание GameState.
+   */
+  boons: AppliedBoon[];
+  /**
+   * Текущие 3 буна на экране левелапа (сгенерированы один раз при входе
+   * в runState='levelup'). null когда экран не показывается.
+   * Хранится в state, а не в render-модуле, чтобы а) рендер был чистой
+   * функцией от state, б) при resetState всё сбрасывалось автоматически.
+   */
+  currentBoonChoices: BoonId[] | null;
 }

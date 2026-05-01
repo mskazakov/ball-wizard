@@ -5,6 +5,7 @@
 // Экспортирует: updateWaves — главная функция, вызывается раз за кадр.
 
 import type { GameState, Grunt, Shooter, Rusher, Vec2 } from './utils/types';
+import { getRandomBoonChoices } from './boons';
 
 // --- Параметры волн ---
 
@@ -101,7 +102,7 @@ export function updateWaves(state: GameState): void {
         // Если есть невыбранные левелапы — приоритет им, не победа и не таймер.
         // Игрок должен подтвердить все левелапы прежде чем игра двинется дальше.
         if (state.player.pendingLevelUps > 0) {
-          state.runState = 'levelup';
+          enterLevelUp(state);
           // Не меняем w.state: остаёмся в 'fighting', чтобы confirmLevelUp
           // знал "это был финальный бой, ставь 'won' после последнего CONTINUE".
           // Если это не финальная волна — после confirmLevelUp вернёмся сюда,
@@ -120,7 +121,7 @@ export function updateWaves(state: GameState): void {
       // таймер НЕ тикает. Это решение из дня 3 недели 2: левелап обязателен
       // для перехода к следующей волне (МВП правило "не выбрал апдейт — не идёшь").
       if (state.player.pendingLevelUps > 0) {
-        state.runState = 'levelup';
+        enterLevelUp(state);
         break;
       }
 
@@ -353,4 +354,23 @@ function createRusher(position: Vec2): Rusher {
     knockbackVelocity: { x: 0, y: 0 },
     xpReward: RUSHER_XP_REWARD,
   };
+}
+
+/**
+ * Сколько бунов показывается на одном экране левелапа.
+ * День 4 недели 2: 3 (по плану ROADMAP). День 5 пул расширится, число останется 3.
+ */
+const BOON_CHOICES_PER_LEVELUP = 3;
+
+/**
+ * Переводит ран в состояние левелапа. Если буны для текущего экрана ещё
+ * не сгенерированы — генерирует их. Вызывается из обоих мест перехода
+ * в 'levelup' (закрытие волны и тик between-таймера), чтобы логика
+ * "сгенерить если null" не дублировалась.
+ */
+function enterLevelUp(state: GameState): void {
+  if (state.currentBoonChoices === null) {
+    state.currentBoonChoices = getRandomBoonChoices(BOON_CHOICES_PER_LEVELUP);
+  }
+  state.runState = 'levelup';
 }

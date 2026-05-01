@@ -123,7 +123,7 @@ function spawnProjectile(state: GameState, from: Vec2, to: Vec2): void {
     position: { x: from.x, y: from.y },
     velocity,
     radius: PROJECTILE_RADIUS,
-    damage: PROJECTILE_DAMAGE,
+    damage: PROJECTILE_DAMAGE * state.player.damageMultiplier,
   };
 
   state.projectiles.push(projectile);

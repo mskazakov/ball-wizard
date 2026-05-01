@@ -19,6 +19,10 @@ const BALL_SACK_SIZE = 5; // ёмкость обоймы
 const FIRE_RATE_MS = 150; // интервал между шарами в обойме
 const RELOAD_TIME_MS = 1000; // полная перезарядка
 
+// --- Боевые модификаторы ---
+/** Стартовый множитель урона. Буну "More damage" прибавляет 0.25 (аддитивно). */
+const PLAYER_START_DAMAGE_MULTIPLIER = 1;
+
 // --- Прогрессия (день 3 недели 2) ---
 /** Стартовый уровень игрока. */
 const PLAYER_START_LEVEL = 1;
@@ -54,6 +58,7 @@ export function createInitialState(viewportWidth: number, viewportHeight: number
       lastShotAt: 0,
       reloadTime: RELOAD_TIME_MS,
       reloadProgress: -1, // -1 = сейчас не перезаряжаемся
+      damageMultiplier: PLAYER_START_DAMAGE_MULTIPLIER,
 
       hp: PLAYER_MAX_HP,
       maxHp: PLAYER_MAX_HP,
@@ -94,6 +99,8 @@ export function createInitialState(viewportWidth: number, viewportHeight: number
       betweenTimer: 0,
     },
     runState: 'playing',
+    boons: [],
+    currentBoonChoices: null,
   };
 }
 
@@ -121,6 +128,8 @@ export function resetState(state: GameState): void {
   state.enemies = fresh.enemies;
   state.waves = fresh.waves;
   state.runState = fresh.runState;
+  state.boons = fresh.boons;
+  state.currentBoonChoices = fresh.currentBoonChoices;
 
   // input.keys НЕ пересоздаём — Set держится тем же,
   // обработчики keydown/keyup в input.ts ссылаются на него по ссылке.

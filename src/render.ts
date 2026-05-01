@@ -1,8 +1,12 @@
 // src/render.ts
 // Отрисовка игры на canvas. Знает про экранные координаты.
-// Экспортирует: render — рисует один кадр.
+// Экспортирует:
+//   - render: рисует один кадр
+//   - getRestartButtonRect: геометрия кнопки RESTART (won/gameOver)
+//   - getBoonButtonRects: геометрия 3 кнопок бунов (levelup)
 
-import type { GameState, Vec2 } from './utils/types';
+import type { BoonId, GameState, Vec2 } from './utils/types';
+import { BOON_DEFINITIONS } from './boons';
 
 // --- Цвета ---
 const BG_COLOR = '#000000';
@@ -31,19 +35,12 @@ const PLAYER_HP_TEXT_X = 16;
 const PLAYER_HP_TEXT_Y = 28;
 
 // --- XP-бар сверху экрана (на всю ширину) ---
-/** Высота полосы в пикселях. Тонкая, чтобы не отъедать игровое поле. */
 const XP_BAR_HEIGHT = 6;
-/** Цвет фона xp-бара — приглушённый, не отвлекает периферию. */
 const XP_BAR_BG = '#1a1a2e';
-/** Цвет заполнения — голубой, контрастно к зелёным HP-барам и красным/оранжевым врагам. */
 const XP_BAR_FG = '#4ec9ff';
-/**
- * Отступ "Lv N" от xp-бара. Уровень рисуется по центру под полосой,
- * мелким шрифтом — нужен только когда захочешь свериться, не лезет в глаз.
- */
 const LEVEL_TEXT_COLOR = '#ffffff';
 const LEVEL_TEXT_FONT = '14px monospace';
-const LEVEL_TEXT_OFFSET_Y = 4; // сколько px ниже xp-бара
+const LEVEL_TEXT_OFFSET_Y = 4;
 
 // --- Текст номера волны (правый верхний угол) ---
 const WAVE_TEXT_COLOR = '#ffffff';
@@ -60,45 +57,68 @@ const WIN_TEXT_FONT = 'bold 64px monospace';
 const LEVELUP_OVERLAY_COLOR = 'rgba(0, 20, 40, 0.7)';
 const LEVELUP_TEXT_COLOR = '#4ec9ff';
 const LEVELUP_TEXT_FONT = 'bold 64px monospace';
-/** Подзаголовок под "LEVEL UP" — показывает на какой уровень переходим. */
 const LEVELUP_SUBTITLE_COLOR = '#ffffff';
 const LEVELUP_SUBTITLE_FONT = '20px monospace';
-const LEVELUP_SUBTITLE_OFFSET_Y = 30; // ниже заголовка
 
-// --- Кнопка Continue (на экране левелапа) ---
-const CONTINUE_BTN_LABEL = 'CONTINUE';
+/**
+ * Y-координата центра заголовка "LEVEL UP" относительно центра canvas.
+ * Заголовок поднят выше центра, чтобы освободить место под подзаголовок
+ * и горизонтальный ряд из 3 кнопок бунов под ним.
+ */
+const LEVELUP_TITLE_OFFSET_Y = -180;
+/** Отступ подзаголовка от заголовка (вниз). */
+const LEVELUP_SUBTITLE_OFFSET_Y = 50;
+
+// --- Кнопки бунов на экране левелапа ---
+const BOON_BTN_WIDTH = 220;
+const BOON_BTN_HEIGHT = 140;
+/** Зазор между соседними кнопками. */
+const BOON_BTN_GAP = 24;
+/** Сколько px ниже центра canvas — верхний край кнопок. */
+const BOON_BTN_OFFSET_Y = -40;
+const BOON_BTN_BG = '#ffffff';
+const BOON_BTN_BG_HOVER = '#e8e8e8'; // зарезервировано на будущее
+const BOON_BTN_BORDER = '#4ec9ff';
+const BOON_BTN_BORDER_WIDTH = 3;
+const BOON_BTN_NAME_COLOR = '#000000';
+const BOON_BTN_NAME_FONT = 'bold 22px monospace';
+const BOON_BTN_DESC_COLOR = '#444444';
+const BOON_BTN_DESC_FONT = '16px monospace';
+/** Отступ имени буна от верха кнопки. */
+const BOON_BTN_NAME_OFFSET_Y = 36;
+/** Отступ описания от имени. */
+const BOON_BTN_DESC_OFFSET_Y = 70;
 
 // --- Экран Game Over ---
 const GAMEOVER_OVERLAY_COLOR = 'rgba(40, 0, 0, 0.7)';
 const GAMEOVER_TEXT_COLOR = '#ff6666';
 const GAMEOVER_TEXT_FONT = 'bold 64px monospace';
 
-// --- Кнопка рестарта (общая для обоих экранов) ---
-/**
- * Прямоугольник кнопки в экранных координатах.
- * Координаты считаются в drawRestartButton от центра canvas, ниже текста заголовка.
- * Эти же значения читает обработчик клика в input.ts через getRestartButtonRect().
- */
+// --- Кнопка рестарта (won/gameOver) ---
 const RESTART_BTN_WIDTH = 240;
 const RESTART_BTN_HEIGHT = 60;
-const RESTART_BTN_OFFSET_Y = 60; // на сколько px ниже центра экрана
+const RESTART_BTN_OFFSET_Y = 60;
 const RESTART_BTN_BG = '#ffffff';
 const RESTART_BTN_TEXT_COLOR = '#000000';
 const RESTART_BTN_FONT = 'bold 24px monospace';
 const RESTART_BTN_LABEL = 'RESTART';
 
-// --- Подсветка игрока в i-frames (после получения урона) ---
-const PLAYER_IFRAMES_COLOR = '#ff5555'; // красноватый, пока неуязвим
+// --- Подсветка игрока в i-frames ---
+const PLAYER_IFRAMES_COLOR = '#ff5555';
 
 // --- Красная вспышка экрана при уроне ---
-/** Длительность вспышки в мс — должна совпадать с PLAYER_RED_FLASH_MS в enemies.ts. */
 const RED_FLASH_DURATION_MS = 250;
-/** Максимальная прозрачность вспышки в момент удара (0..1). */
 const RED_FLASH_MAX_ALPHA = 0.2;
 
-/**
- * Переводит мировые координаты в экранные с учётом камеры.
- */
+/** Прямоугольник в экранных координатах. */
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Переводит мировые координаты в экранные с учётом камеры. */
 function worldToScreen(world: Vec2, state: GameState): Vec2 {
   return {
     x: world.x - state.camera.x,
@@ -107,23 +127,16 @@ function worldToScreen(world: Vec2, state: GameState): Vec2 {
 }
 
 /**
- * Рисует один кадр.
- * Порядок отрисовки (снизу вверх по слоям):
- *   1) фон
- *   2) граница арены
- *   3) радиус атаки игрока (под всем остальным, чтобы не мешал)
- *   4) враги и их HP-бары
- *   5) шары
- *   6) игрок
+ * Рисует один кадр. Порядок отрисовки снизу вверх по слоям:
+ *   1) фон → 2) арена → 3) радиус атаки → 4) враги → 5) шары игрока
+ *   → 6) снаряды врагов → 7) игрок → 8) HUD → 9) красная вспышка.
  */
 export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
   const canvas = ctx.canvas;
 
-  // 1) Очистка экрана
   ctx.fillStyle = BG_COLOR;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // 2) Граница арены
   ctx.strokeStyle = ARENA_BORDER_COLOR;
   ctx.lineWidth = 4;
   ctx.strokeRect(
@@ -133,31 +146,15 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
     state.arena.height,
   );
 
-  // 3) Радиус атаки игрока (визуализация для теста)
   drawAttackRadius(ctx, state);
-
-  // 4) Враги
   drawEnemies(ctx, state);
-
-  // 5) Шары игрока
   drawProjectiles(ctx, state);
-
-  // 5.5) Снаряды врагов
   drawEnemyProjectiles(ctx, state);
-
-  // 6) Игрок
   drawPlayer(ctx, state);
-
-  // 7) HUD (поверх всего, в экранных координатах)
   drawHud(ctx, state);
-
-  // 8) Красная вспышка при уроне игроку — поверх HUD, чтобы накрыть весь экран
   drawDamageFlash(ctx, state);
 }
 
-/**
- * Полупрозрачный круг вокруг игрока — показывает зону, в которой он ищет цель.
- */
 function drawAttackRadius(ctx: CanvasRenderingContext2D, state: GameState): void {
   const center = worldToScreen(state.player.position, state);
   ctx.fillStyle = ATTACK_RADIUS_COLOR;
@@ -166,11 +163,6 @@ function drawAttackRadius(ctx: CanvasRenderingContext2D, state: GameState): void
   ctx.fill();
 }
 
-/**
- * Рисует врагов: красный круг + HP-бар над ним.
- * Мёртвых врагов в массиве уже нет (удаляются в projectiles.resolveHits),
- * поэтому проверка alive не нужна.
- */
 function drawEnemies(ctx: CanvasRenderingContext2D, state: GameState): void {
   for (const e of state.enemies) {
     const screen = worldToScreen(e.position, state);
@@ -182,28 +174,22 @@ function drawEnemies(ctx: CanvasRenderingContext2D, state: GameState): void {
     ctx.arc(screen.x, screen.y, e.radius, 0, Math.PI * 2);
     ctx.fill();
 
-    // HP-бар
     const barX = screen.x - HP_BAR_WIDTH / 2;
     const barY = screen.y - e.radius - HP_BAR_OFFSET_Y - HP_BAR_HEIGHT;
 
     ctx.fillStyle = ENEMY_HP_BG;
     ctx.fillRect(barX, barY, HP_BAR_WIDTH, HP_BAR_HEIGHT);
 
-    // Призрачный HP — белая полоса от реального HP до ghostHp
     const ghostRatio = Math.max(0, e.ghostHp / e.maxHp);
     ctx.fillStyle = ENEMY_HP_GHOST;
     ctx.fillRect(barX, barY, HP_BAR_WIDTH * ghostRatio, HP_BAR_HEIGHT);
 
-    // Реальный HP — зелёная полоса поверх белой (рисуется сверху, поэтому видна)
     const hpRatio = Math.max(0, e.hp / e.maxHp);
     ctx.fillStyle = ENEMY_HP_FG;
     ctx.fillRect(barX, barY, HP_BAR_WIDTH * hpRatio, HP_BAR_HEIGHT);
   }
 }
 
-/**
- * Рисует все активные шары игрока как жёлтые круги.
- */
 function drawProjectiles(ctx: CanvasRenderingContext2D, state: GameState): void {
   ctx.fillStyle = PROJECTILE_COLOR;
   for (const proj of state.projectiles) {
@@ -214,11 +200,6 @@ function drawProjectiles(ctx: CanvasRenderingContext2D, state: GameState): void 
   }
 }
 
-/**
- * Рисует снаряды врагов как оранжевые круги.
- * Отдельная функция от drawProjectiles, чтобы не путать визуально:
- * жёлтые шары — твои, оранжевые — летят в тебя.
- */
 function drawEnemyProjectiles(ctx: CanvasRenderingContext2D, state: GameState): void {
   ctx.fillStyle = ENEMY_PROJECTILE_COLOR;
   for (const proj of state.enemyProjectiles) {
@@ -229,10 +210,6 @@ function drawEnemyProjectiles(ctx: CanvasRenderingContext2D, state: GameState): 
   }
 }
 
-/**
- * Игрок — белый квадрат, центр в player.position.
- * Во время i-frames рисуется красноватым (для теста — заменим вспышкой в дне 6).
- */
 function drawPlayer(ctx: CanvasRenderingContext2D, state: GameState): void {
   const half = state.player.size / 2;
   const screen = worldToScreen(state.player.position, state);
@@ -241,19 +218,11 @@ function drawPlayer(ctx: CanvasRenderingContext2D, state: GameState): void {
   ctx.fillRect(screen.x - half, screen.y - half, state.player.size, state.player.size);
 }
 
-/**
- * HUD дня 5 — HP игрока (слева) и номер волны (справа).
- * Поверх всего: экран победы если waves.state === 'won'.
- * Полноценный HUD (полоса, иконки бунов) — день 6 недели 2.
- */
 function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
   const canvas = ctx.canvas;
 
-  // XP-бар сверху на всю ширину (день 3 недели 2).
-  // Рисуется первым в HUD, потому что его место — самый верх экрана.
   drawXpBar(ctx, state);
 
-  // HP игрока (слева)
   ctx.fillStyle = PLAYER_HP_TEXT_COLOR;
   ctx.font = PLAYER_HP_TEXT_FONT;
   ctx.textBaseline = 'alphabetic';
@@ -264,7 +233,6 @@ function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
     PLAYER_HP_TEXT_Y,
   );
 
-  // Номер волны (справа)
   ctx.fillStyle = WAVE_TEXT_COLOR;
   ctx.font = WAVE_TEXT_FONT;
   ctx.textAlign = 'right';
@@ -274,8 +242,6 @@ function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
     WAVE_TEXT_Y,
   );
 
-  // Финальные оверлеи: победа или поражение.
-  // Оба останавливают игру (см. game.ts) и показывают кнопку рестарта.
   if (state.runState === 'won') {
     drawWinScreen(ctx);
   } else if (state.runState === 'gameOver') {
@@ -284,34 +250,20 @@ function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
     drawLevelUpScreen(ctx, state);
   }
 
-  // Сбрасываем textAlign на дефолт, чтобы не повлиять на другой код
   ctx.textAlign = 'left';
 }
 
-/**
- * XP-бар на всю ширину canvas, у самого верха экрана.
- * Под ним — мелким текстом по центру "Lv N" (для редкой проверки уровня,
- * не отвлекает периферию во время боя).
- *
- * Полоса заполняется от 0 до xpToNextLevel. В состоянии 'levelup'
- * полоса визуально полная (xp >= xpToNextLevel) — клампим до 1, чтобы
- * не вылезала за пределы при xp > порога (например после убийства стрелка
- * с порога 2/2 → 5/2).
- */
 function drawXpBar(ctx: CanvasRenderingContext2D, state: GameState): void {
   const canvas = ctx.canvas;
   const player = state.player;
 
-  // Фон полосы
   ctx.fillStyle = XP_BAR_BG;
   ctx.fillRect(0, 0, canvas.width, XP_BAR_HEIGHT);
 
-  // Заполнение
   const ratio = Math.min(1, player.xp / player.xpToNextLevel);
   ctx.fillStyle = XP_BAR_FG;
   ctx.fillRect(0, 0, canvas.width * ratio, XP_BAR_HEIGHT);
 
-  // Уровень текстом по центру под полосой
   ctx.fillStyle = LEVEL_TEXT_COLOR;
   ctx.font = LEVEL_TEXT_FONT;
   ctx.textAlign = 'center';
@@ -324,13 +276,12 @@ function drawXpBar(ctx: CanvasRenderingContext2D, state: GameState): void {
 }
 
 /**
- * Экран левелапа: оверлей + "LEVEL UP" + подзаголовок "Lv N → N+1" + кнопка Continue.
- * День 3 недели 2: только заглушка-кнопка, выбора бунов нет.
- * День 4 недели 2: вместо одной кнопки — 3 кнопки с бунами.
+ * Экран левелапа: оверлей + "LEVEL UP" + подзаголовок + 3 кнопки бунов.
  *
- * Хитбокс кнопки — тот же getRestartButtonRect, label другой. Это сознательное
- * переиспользование: одна кнопка по центру = одна геометрия. Когда в дне 4
- * появятся 3 кнопки, тут будет своя getBoonButtonRects.
+ * Буны берутся из state.currentBoonChoices (сгенерированы в waves.ts при
+ * входе в 'levelup'). Если по какой-то причине массив пуст или null —
+ * рисуем заглушку, чтобы не падать. Это защита от бага, нормальный путь
+ * через waves.ts всегда заполняет массив до перехода в 'levelup'.
  */
 function drawLevelUpScreen(ctx: CanvasRenderingContext2D, state: GameState): void {
   const canvas = ctx.canvas;
@@ -342,11 +293,12 @@ function drawLevelUpScreen(ctx: CanvasRenderingContext2D, state: GameState): voi
   ctx.font = LEVELUP_TEXT_FONT;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('LEVEL UP', canvas.width / 2, canvas.height / 2 - 40);
+  ctx.fillText(
+    'LEVEL UP',
+    canvas.width / 2,
+    canvas.height / 2 + LEVELUP_TITLE_OFFSET_Y,
+  );
 
-  // Подзаголовок: текущий уровень и сколько ещё выборов осталось.
-  // Уровень уже повышен в момент набора xp (см. grantXp), здесь только
-  // подтверждение буна. День 4: будет 3 кнопки бунов вместо одной.
   ctx.fillStyle = LEVELUP_SUBTITLE_COLOR;
   ctx.font = LEVELUP_SUBTITLE_FONT;
   const pending = state.player.pendingLevelUps;
@@ -357,20 +309,75 @@ function drawLevelUpScreen(ctx: CanvasRenderingContext2D, state: GameState): voi
   ctx.fillText(
     subtitle,
     canvas.width / 2,
-    canvas.height / 2 - 40 + LEVELUP_SUBTITLE_OFFSET_Y,
+    canvas.height / 2 + LEVELUP_TITLE_OFFSET_Y + LEVELUP_SUBTITLE_OFFSET_Y,
   );
 
-  // Кнопка Continue — переиспользуем геометрию кнопки рестарта.
-  // День 4: заменим на 3 кнопки бунов.
-  drawCenterButton(ctx, CONTINUE_BTN_LABEL);
+  const choices = state.currentBoonChoices;
+  if (choices && choices.length > 0) {
+    drawBoonButtons(ctx, choices);
+  }
 
   ctx.textBaseline = 'alphabetic';
 }
 
+/** Рисует ряд кнопок бунов по геометрии из getBoonButtonRects. */
+function drawBoonButtons(ctx: CanvasRenderingContext2D, choices: BoonId[]): void {
+  const rects = getBoonButtonRects(ctx.canvas, choices.length);
+
+  for (let i = 0; i < choices.length; i++) {
+    const rect = rects[i];
+    const def = BOON_DEFINITIONS[choices[i]];
+
+    ctx.fillStyle = BOON_BTN_BG;
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+
+    ctx.strokeStyle = BOON_BTN_BORDER;
+    ctx.lineWidth = BOON_BTN_BORDER_WIDTH;
+    ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+
+    ctx.fillStyle = BOON_BTN_NAME_COLOR;
+    ctx.font = BOON_BTN_NAME_FONT;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(def.name, rect.x + rect.w / 2, rect.y + BOON_BTN_NAME_OFFSET_Y);
+
+    ctx.fillStyle = BOON_BTN_DESC_COLOR;
+    ctx.font = BOON_BTN_DESC_FONT;
+    ctx.fillText(
+      def.description,
+      rect.x + rect.w / 2,
+      rect.y + BOON_BTN_DESC_OFFSET_Y,
+    );
+  }
+
+  // Сохраняем заглушку BG_HOVER от tree-shaker, понадобится в дне 5+
+  void BOON_BTN_BG_HOVER;
+}
+
 /**
- * Полупрозрачная заливка + крупный текст "YOU WIN" по центру.
- * Кнопка рестарта появится в дне 7.
+ * Геометрия кнопок бунов в экранных координатах.
+ * Кнопки в ряд по центру по горизонтали, на BOON_BTN_OFFSET_Y по вертикали.
+ *
+ * Используется и в render (для отрисовки), и в input (для проверки клика
+ * по индексу буна — клик в i-ю кнопку = выбор state.currentBoonChoices[i]).
  */
+export function getBoonButtonRects(canvas: HTMLCanvasElement, count: number): Rect[] {
+  const totalWidth = count * BOON_BTN_WIDTH + (count - 1) * BOON_BTN_GAP;
+  const startX = canvas.width / 2 - totalWidth / 2;
+  const y = canvas.height / 2 + BOON_BTN_OFFSET_Y;
+
+  const rects: Rect[] = [];
+  for (let i = 0; i < count; i++) {
+    rects.push({
+      x: startX + i * (BOON_BTN_WIDTH + BOON_BTN_GAP),
+      y,
+      w: BOON_BTN_WIDTH,
+      h: BOON_BTN_HEIGHT,
+    });
+  }
+  return rects;
+}
+
 function drawWinScreen(ctx: CanvasRenderingContext2D): void {
   const canvas = ctx.canvas;
 
@@ -385,12 +392,9 @@ function drawWinScreen(ctx: CanvasRenderingContext2D): void {
 
   drawCenterButton(ctx, RESTART_BTN_LABEL);
 
-  ctx.textBaseline = 'alphabetic'; // вернуть дефолт
+  ctx.textBaseline = 'alphabetic';
 }
 
-/**
- * Полупрозрачная заливка + крупный текст "GAME OVER" по центру + кнопка рестарта.
- */
 function drawGameOverScreen(ctx: CanvasRenderingContext2D): void {
   const canvas = ctx.canvas;
 
@@ -405,13 +409,13 @@ function drawGameOverScreen(ctx: CanvasRenderingContext2D): void {
 
   drawCenterButton(ctx, RESTART_BTN_LABEL);
 
-  ctx.textBaseline = 'alphabetic'; // вернуть дефолт
+  ctx.textBaseline = 'alphabetic';
 }
 
 /**
- * Рисует белую кнопку с произвольным лейблом по центру (ниже заголовка экрана).
- * Используется для RESTART (на 'won'/'gameOver') и CONTINUE (на 'levelup').
- * Геометрия одна — getRestartButtonRect — поэтому хитбокс клика общий.
+ * Рисует белую кнопку с лейблом по центру (ниже заголовка экрана).
+ * Используется только для RESTART на won/gameOver. На levelup теперь
+ * 3 кнопки бунов (см. drawBoonButtons).
  */
 function drawCenterButton(ctx: CanvasRenderingContext2D, label: string): void {
   const rect = getRestartButtonRect(ctx.canvas);
@@ -426,18 +430,8 @@ function drawCenterButton(ctx: CanvasRenderingContext2D, label: string): void {
   ctx.fillText(label, rect.x + rect.w / 2, rect.y + rect.h / 2);
 }
 
-/**
- * Возвращает прямоугольник кнопки рестарта в экранных координатах.
- * Используется и в render (для отрисовки), и в input (для проверки клика).
- *
- * @returns {x, y, w, h} — верхний левый угол, ширина, высота
- */
-export function getRestartButtonRect(canvas: HTMLCanvasElement): {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-} {
+/** Геометрия кнопки RESTART на won/gameOver. */
+export function getRestartButtonRect(canvas: HTMLCanvasElement): Rect {
   return {
     x: canvas.width / 2 - RESTART_BTN_WIDTH / 2,
     y: canvas.height / 2 + RESTART_BTN_OFFSET_Y,
@@ -446,15 +440,11 @@ export function getRestartButtonRect(canvas: HTMLCanvasElement): {
   };
 }
 
-/**
- * Красная полупрозрачная заливка поверх всего экрана при получении урона.
- * Прозрачность линейно затухает от RED_FLASH_MAX_ALPHA до 0 за RED_FLASH_DURATION_MS.
- */
 function drawDamageFlash(ctx: CanvasRenderingContext2D, state: GameState): void {
   const remaining = state.player.redFlashUntil - state.time.now;
   if (remaining <= 0) return;
 
-  const ratio = remaining / RED_FLASH_DURATION_MS; // 1 в момент удара, 0 в конце
+  const ratio = remaining / RED_FLASH_DURATION_MS;
   const alpha = RED_FLASH_MAX_ALPHA * ratio;
 
   const canvas = ctx.canvas;
@@ -462,10 +452,6 @@ function drawDamageFlash(ctx: CanvasRenderingContext2D, state: GameState): void 
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
-/**
- * Цвет круга врага по типу. Хелпер чтобы drawEnemies не превращался в гнездо тернарников.
- * При добавлении нового типа врага — добавляем один case, TypeScript заставит обработать.
- */
 function getEnemyColor(kind: 'grunt' | 'shooter' | 'rusher'): string {
   switch (kind) {
     case 'grunt':
