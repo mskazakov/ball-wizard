@@ -4,7 +4,7 @@
 
 import type { GameState } from './utils/types';
 import { resetState } from './state';
-import { getRestartButtonRect, getBoonButtonRects } from './render';
+import { getRestartButtonRect, getBoonButtonRects, BOON_SLOTS_TOTAL } from './render';
 import { confirmLevelUp } from './xp';
 
 /**
@@ -95,8 +95,11 @@ function handleLevelUpClick(
   const choices = state.currentBoonChoices;
   if (!choices || choices.length === 0) return;
 
-  const rects = getBoonButtonRects(canvas, choices.length);
-  for (let i = 0; i < rects.length; i++) {
+  // Геометрия всегда на 3 слота (фиксированный layout, см. BOON_SLOTS_TOTAL
+  // в render.ts). Реальных бунов может быть меньше — итерируем только по ним,
+  // лишние слоты пустые, клик в них игнорируется.
+  const rects = getBoonButtonRects(canvas, BOON_SLOTS_TOTAL);
+  for (let i = 0; i < choices.length; i++) {
     if (isInsideRect(clickX, clickY, rects[i])) {
       confirmLevelUp(state, choices[i]);
       return;

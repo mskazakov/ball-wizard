@@ -70,6 +70,18 @@ const LEVELUP_TITLE_OFFSET_Y = -180;
 const LEVELUP_SUBTITLE_OFFSET_Y = 50;
 
 // --- Кнопки бунов на экране левелапа ---
+/**
+ * Сколько слотов под буны всегда показывается на экране левелапа.
+ * Должно совпадать с BOON_CHOICES_PER_LEVELUP в waves.ts. Геометрия слотов
+ * фиксирована — даже если доступных бунов меньше, layout не съезжает,
+ * лишние слоты остаются пустыми.
+ *
+ * ТЕХДОЛГ: при появлении третьего использования числа 3 в этом контексте —
+ * выносим в общий конфиг (это уже третье место, признаю — но конфиг для UI
+ * vs конфиг для game logic ещё не разведены, см. CURRENT_STATE).
+ */
+export const BOON_SLOTS_TOTAL = 3;
+
 const BOON_BTN_WIDTH = 220;
 const BOON_BTN_HEIGHT = 140;
 /** Зазор между соседними кнопками. */
@@ -320,11 +332,21 @@ function drawLevelUpScreen(ctx: CanvasRenderingContext2D, state: GameState): voi
   ctx.textBaseline = 'alphabetic';
 }
 
-/** Рисует ряд кнопок бунов по геометрии из getBoonButtonRects. */
+/**
+ * Рисует ряд из BOON_SLOTS_TOTAL слотов. Слоты, для которых есть буну
+ * в choices — рисуются как обычные кнопки. Лишние слоты (когда у игрока
+ * выкачаны буны до капа и пул сокращён) — пустые, ничего не рисуется.
+ *
+ * Геометрия одинаковая всегда (3 слота), чтобы layout не "съезжал" при
+ * меньшем числе доступных бунов. Клик в пустой слот игнорируется в input.ts.
+ */
 function drawBoonButtons(ctx: CanvasRenderingContext2D, choices: BoonId[]): void {
-  const rects = getBoonButtonRects(ctx.canvas, choices.length);
+  const rects = getBoonButtonRects(ctx.canvas, BOON_SLOTS_TOTAL);
 
-  for (let i = 0; i < choices.length; i++) {
+  for (let i = 0; i < BOON_SLOTS_TOTAL; i++) {
+    // Слот без буна — не рисуем ничего, оставляем пустоту.
+    if (i >= choices.length) continue;
+
     const rect = rects[i];
     const def = BOON_DEFINITIONS[choices[i]];
 

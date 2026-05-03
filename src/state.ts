@@ -23,6 +23,9 @@ const RELOAD_TIME_MS = 1000; // полная перезарядка
 /** Стартовый множитель урона. Буну "More damage" прибавляет 0.25 (аддитивно). */
 const PLAYER_START_DAMAGE_MULTIPLIER = 1;
 
+/** Стартовое количество шаров за выстрел. Бун "More projectiles" прибавляет +1. */
+const PLAYER_START_PROJECTILES_PER_SHOT = 1;
+
 // --- Прогрессия (день 3 недели 2) ---
 /** Стартовый уровень игрока. */
 const PLAYER_START_LEVEL = 1;
@@ -59,6 +62,7 @@ export function createInitialState(viewportWidth: number, viewportHeight: number
       reloadTime: RELOAD_TIME_MS,
       reloadProgress: -1, // -1 = сейчас не перезаряжаемся
       damageMultiplier: PLAYER_START_DAMAGE_MULTIPLIER,
+      projectilesPerShot: PLAYER_START_PROJECTILES_PER_SHOT,
 
       hp: PLAYER_MAX_HP,
       maxHp: PLAYER_MAX_HP,

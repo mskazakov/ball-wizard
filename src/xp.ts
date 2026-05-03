@@ -94,7 +94,7 @@ export function confirmLevelUp(state: GameState, chosenBoon: BoonId): void {
     // него не выходим. Без этой строки следующий экран был бы пустой.
     // Длина пула — та же что в waves.ts (3), захардкожена дважды.
     // Техдолг: при появлении третьего использования вынести в utils/constants.
-    state.currentBoonChoices = getRandomBoonChoices(3);
+    state.currentBoonChoices = getRandomBoonChoices(state, 3);
     return;
   }
 

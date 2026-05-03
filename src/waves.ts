@@ -370,7 +370,7 @@ const BOON_CHOICES_PER_LEVELUP = 3;
  */
 function enterLevelUp(state: GameState): void {
   if (state.currentBoonChoices === null) {
-    state.currentBoonChoices = getRandomBoonChoices(BOON_CHOICES_PER_LEVELUP);
+    state.currentBoonChoices = getRandomBoonChoices(state, BOON_CHOICES_PER_LEVELUP);
   }
   state.runState = 'levelup';
 }

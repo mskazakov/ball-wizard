@@ -31,6 +31,13 @@ export interface Player {
    */
   damageMultiplier: number;
 
+  /**
+   * Сколько шаров выпускается за один выстрел. Стартовое значение — 1.
+   * Бун "More projectiles" прибавляет +1 (cap 2 → максимум 3 шара).
+   * При >1 шары летят веером с углом 15° между соседними.
+   */
+  projectilesPerShot: number;
+
   // --- Здоровье ---
   hp: number; // текущее здоровье
   maxHp: number; // максимальное здоровье
@@ -225,7 +232,7 @@ export type RunState = 'playing' | 'levelup' | 'won' | 'gameOver';
  * Идентификатор буна. Расширяется по мере добавления новых бунов.
  * День 4 недели 2: только 'more_damage'.
  */
-export type BoonId = 'more_damage';
+export type BoonId = 'more_damage' | 'fast_hands' | 'more_projectiles' | 'too_powerful';
 
 /**
  * Описание буна — статичные данные (имя, эффект). Список всех BoonDefinition
@@ -237,6 +244,12 @@ export interface BoonDefinition {
   name: string;
   /** Описание эффекта одной строкой, под именем на кнопке. */
   description: string;
+  /**
+   * Максимальное число раз, которое игрок может взять этот бун за ран.
+   * При достижении капа бун исключается из пула getRandomBoonChoices.
+   * Заглушка 'too_powerful' имеет cap = Infinity (всегда доступна).
+   */
+  cap: number;
 }
 
 /**

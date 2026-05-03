@@ -3,12 +3,19 @@
 // Экспортирует: updateProjectiles — главная функция, вызывается каждый кадр.
 
 import type { GameState, Projectile, Enemy, Vec2 } from './utils/types';
-import { distanceSquared, normalize, scale, subtract } from './utils/math';
+import { distanceSquared, normalize, subtract } from './utils/math';
 
 // --- Параметры шара ---
 const PROJECTILE_RADIUS = 6; // визуальный радиус и хитбокс
 const PROJECTILE_SPEED = 900; // пикселей в секунду
 const PROJECTILE_DAMAGE = 10;
+
+/**
+ * Угол между соседними шарами в веере (радианы).
+ * При projectilesPerShot=1 не используется. При 2 — два шара под ±7.5°,
+ * при 3 — три шара под −15°, 0°, +15° от направления на цель.
+ */
+const PROJECTILE_SPREAD_ANGLE_RAD = (15 * Math.PI) / 180;
 
 // --- Hit feedback (день 6) ---
 /** Сколько мс враг подсвечен белым после попадания. */
@@ -75,8 +82,11 @@ function tryShoot(state: GameState): void {
   const enemy = findNearestEnemy(state);
   if (!enemy) return; // нет цели — не стреляем
 
-  spawnProjectile(state, p.position, enemy.position);
+  spawnProjectileFan(state, p.position, enemy.position, p.projectilesPerShot);
 
+  // Один "выстрел" = один тик из обоймы, независимо от количества шаров.
+  // Это by design: иначе +1 projectile уменьшал бы число выстрелов до перезарядки,
+  // что нивелировало бы прирост DPS. Решение: бун добавляет шары, не съедает обойму.
   p.ballSackCurrent -= 1;
   p.lastShotAt = state.time.now;
 
@@ -112,21 +122,44 @@ function findNearestEnemy(state: GameState): Enemy | null {
 }
 
 /**
- * Создаёт новый шар, летящий из позиции `from` в направлении `to`.
- * Скорость и урон — константы из этого файла.
+ * Создаёт N шаров веером, летящих из позиции `from` в направлении `to`.
+ * При count=1 — один шар точно в цель (поведение как было до буна).
+ * При count>1 — шары симметрично распределены вокруг центрального направления
+ * с фиксированным углом PROJECTILE_SPREAD_ANGLE_RAD между соседними.
+ *
+ * Формула углового смещения для шара i из count:
+ *   offset = (i - (count - 1) / 2) * SPREAD_ANGLE
+ * При count=1: offset=0 (один шар по центру).
+ * При count=2: offsets = [-0.5, +0.5] * SPREAD_ANGLE.
+ * При count=3: offsets = [-1, 0, +1] * SPREAD_ANGLE.
+ *
+ * Урон каждого шара — полный (PROJECTILE_DAMAGE * damageMultiplier).
+ * Бун "More projectiles" — это именно прирост DPS, а не разделение урона.
  */
-function spawnProjectile(state: GameState, from: Vec2, to: Vec2): void {
-  const direction = normalize(subtract(to, from));
-  const velocity = scale(direction, PROJECTILE_SPEED);
+function spawnProjectileFan(state: GameState, from: Vec2, to: Vec2, count: number): void {
+  const baseDirection = normalize(subtract(to, from));
+  // Базовый угол направления на цель.
+  const baseAngle = Math.atan2(baseDirection.y, baseDirection.x);
+  const damage = PROJECTILE_DAMAGE * state.player.damageMultiplier;
 
-  const projectile: Projectile = {
-    position: { x: from.x, y: from.y },
-    velocity,
-    radius: PROJECTILE_RADIUS,
-    damage: PROJECTILE_DAMAGE * state.player.damageMultiplier,
-  };
+  for (let i = 0; i < count; i++) {
+    const offset = (i - (count - 1) / 2) * PROJECTILE_SPREAD_ANGLE_RAD;
+    const angle = baseAngle + offset;
 
-  state.projectiles.push(projectile);
+    const velocity = {
+      x: Math.cos(angle) * PROJECTILE_SPEED,
+      y: Math.sin(angle) * PROJECTILE_SPEED,
+    };
+
+    const projectile: Projectile = {
+      position: { x: from.x, y: from.y },
+      velocity,
+      radius: PROJECTILE_RADIUS,
+      damage,
+    };
+
+    state.projectiles.push(projectile);
+  }
 }
 
 // ------------------------------------------------------------
