@@ -28,11 +28,32 @@ const HP_BAR_WIDTH = 50;
 const HP_BAR_HEIGHT = 5;
 const HP_BAR_OFFSET_Y = 8; // сколько px над врагом
 
-// --- HP-индикатор игрока (текстом, в углу экрана) ---
-const PLAYER_HP_TEXT_COLOR = '#ffffff';
-const PLAYER_HP_TEXT_FONT = '20px monospace';
-const PLAYER_HP_TEXT_X = 16;
-const PLAYER_HP_TEXT_Y = 28;
+// --- HP-бар игрока (souls-like: растёт вправо при росте maxHp) ---
+const HP_BAR_X = 16;
+/** Y верхнего края бара. Ниже XP-бара (6px высота) с отступом. */
+const HP_BAR_Y = 18;
+const PLAYER_HP_BAR_HEIGHT = 24;
+/**
+ * Базовая ширина бара при PLAYER_BASE_MAX_HP. При росте maxHp бар растёт
+ * вправо линейно: width = HP_BAR_BASE_WIDTH * (maxHp / PLAYER_BASE_MAX_HP).
+ * Кап — половина canvas (см. HP_BAR_MAX_WIDTH_RATIO в drawHpBar).
+ */
+const HP_BAR_BASE_WIDTH = 220;
+/** maxHp при котором ширина бара = HP_BAR_BASE_WIDTH. Стартовое значение игрока. */
+const PLAYER_BASE_MAX_HP = 100;
+/** Доля ширины canvas, после которой бар перестаёт расти (souls-like кап). */
+const HP_BAR_MAX_WIDTH_RATIO = 0.5;
+
+const HP_BAR_BG = '#3a0a0a'; // тёмно-красный фон (пустая часть)
+const HP_BAR_FG = '#c0392b'; // красная заливка (текущее HP)
+const HP_BAR_BORDER = '#000000';
+const HP_BAR_BORDER_WIDTH = 2;
+
+/** Текст внутри HP-бара (`87 / 100`). */
+const HP_BAR_TEXT_COLOR = '#ffffff';
+const HP_BAR_TEXT_FONT = 'bold 14px monospace';
+/** Отступ текста от левого края бара. */
+const HP_BAR_TEXT_PADDING_X = 8;
 
 // --- XP-бар сверху экрана (на всю ширину) ---
 const XP_BAR_HEIGHT = 6;
@@ -117,10 +138,33 @@ const RESTART_BTN_LABEL = 'RESTART';
 
 // --- Подсветка игрока в i-frames ---
 const PLAYER_IFRAMES_COLOR = '#ff5555';
-
 // --- Красная вспышка экрана при уроне ---
 const RED_FLASH_DURATION_MS = 250;
 const RED_FLASH_MAX_ALPHA = 0.2;
+// --- Иконки бунов (левый низ экрана) ---
+const BOON_ICON_SIZE = 36;
+/** Зазор между соседними иконками. */
+const BOON_ICON_GAP = 8;
+/** Отступ ряда иконок от левого края экрана. */
+const BOON_ICON_X = 16;
+/** Отступ ряда иконок от нижнего края экрана. */
+const BOON_ICON_BOTTOM_PADDING = 16;
+const BOON_ICON_BORDER = '#000000';
+const BOON_ICON_BORDER_WIDTH = 2;
+
+/** Аббревиатура буна (shortLabel) внутри иконки. */
+const BOON_ICON_LABEL_COLOR = '#ffffff';
+const BOON_ICON_LABEL_FONT = 'bold 14px monospace';
+
+/**
+ * Счётчик стеков (×N) в правом нижнем углу иконки. Не показывается
+ * при stackCount <= 1 — одиночный бун без счётчика читается чище.
+ */
+const BOON_ICON_COUNT_COLOR = '#ffffff';
+const BOON_ICON_COUNT_FONT = 'bold 12px monospace';
+const BOON_ICON_COUNT_BG = 'rgba(0, 0, 0, 0.7)';
+const BOON_ICON_COUNT_PADDING_X = 4;
+const BOON_ICON_COUNT_PADDING_Y = 2;
 
 /** Прямоугольник в экранных координатах. */
 export interface Rect {
@@ -141,7 +185,8 @@ function worldToScreen(world: Vec2, state: GameState): Vec2 {
 /**
  * Рисует один кадр. Порядок отрисовки снизу вверх по слоям:
  *   1) фон → 2) арена → 3) радиус атаки → 4) враги → 5) шары игрока
- *   → 6) снаряды врагов → 7) игрок → 8) HUD → 9) красная вспышка.
+ *   → 6) снаряды врагов → 7) игрок → 8) HUD → 9) оверлеи (win/gameOver/levelup)
+ *   → 10) красная вспышка.
  */
 export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
   const canvas = ctx.canvas;
@@ -164,6 +209,7 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
   drawEnemyProjectiles(ctx, state);
   drawPlayer(ctx, state);
   drawHud(ctx, state);
+  drawOverlays(ctx, state);
   drawDamageFlash(ctx, state);
 }
 
@@ -230,30 +276,27 @@ function drawPlayer(ctx: CanvasRenderingContext2D, state: GameState): void {
   ctx.fillRect(screen.x - half, screen.y - half, state.player.size, state.player.size);
 }
 
+/**
+ * Игровой HUD: XP-бар, HP-бар, счётчик волн, иконки бунов.
+ * Рисуется поверх игрового мира, но под оверлеями (win/gameOver/levelup).
+ */
 function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
-  const canvas = ctx.canvas;
-
   drawXpBar(ctx, state);
+  drawHpBar(ctx, state);
+  drawWaveCounter(ctx, state);
+  drawBoonIcons(ctx, state);
 
-  ctx.fillStyle = PLAYER_HP_TEXT_COLOR;
-  ctx.font = PLAYER_HP_TEXT_FONT;
-  ctx.textBaseline = 'alphabetic';
+  // Восстанавливаем дефолты, чтобы последующие drawOverlays не наследовали
+  // случайные textAlign/textBaseline от последней под-функции HUD.
   ctx.textAlign = 'left';
-  ctx.fillText(
-    `HP: ${Math.max(0, Math.ceil(state.player.hp))} / ${state.player.maxHp}`,
-    PLAYER_HP_TEXT_X,
-    PLAYER_HP_TEXT_Y,
-  );
+  ctx.textBaseline = 'alphabetic';
+}
 
-  ctx.fillStyle = WAVE_TEXT_COLOR;
-  ctx.font = WAVE_TEXT_FONT;
-  ctx.textAlign = 'right';
-  ctx.fillText(
-    `Wave ${state.waves.current} / 5`,
-    canvas.width - WAVE_TEXT_RIGHT_PADDING,
-    WAVE_TEXT_Y,
-  );
-
+/**
+ * Оверлеи финальных и промежуточных экранов. Рисуются последними поверх HUD.
+ * Только один экран активен одновременно — диспетчер по runState.
+ */
+function drawOverlays(ctx: CanvasRenderingContext2D, state: GameState): void {
   if (state.runState === 'won') {
     drawWinScreen(ctx);
   } else if (state.runState === 'gameOver') {
@@ -261,8 +304,6 @@ function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
   } else if (state.runState === 'levelup') {
     drawLevelUpScreen(ctx, state);
   }
-
-  ctx.textAlign = 'left';
 }
 
 function drawXpBar(ctx: CanvasRenderingContext2D, state: GameState): void {
@@ -285,6 +326,135 @@ function drawXpBar(ctx: CanvasRenderingContext2D, state: GameState): void {
     canvas.width / 2,
     XP_BAR_HEIGHT + LEVEL_TEXT_OFFSET_Y,
   );
+}
+
+/**
+ * HP-бар игрока в левом верхнем углу. Souls-like поведение:
+ *   - длина бара пропорциональна maxHp (растёт вправо при росте maxHp)
+ *   - кап на половине ширины canvas — дальше визуально не растёт
+ *   - заливка показывает текущее hp / maxHp
+ *   - текст "87 / 100" внутри бара слева
+ *
+ * При низком HP текст оказывается на пустой (тёмной) части бара —
+ * это ок, текст белый, фон тёмно-красный, контраст достаточен.
+ */
+function drawHpBar(ctx: CanvasRenderingContext2D, state: GameState): void {
+  const canvas = ctx.canvas;
+  const player = state.player;
+
+  // Длина бара = базовая × (maxHp / базовый maxHp), но не больше половины canvas.
+  const desiredWidth = HP_BAR_BASE_WIDTH * (player.maxHp / PLAYER_BASE_MAX_HP);
+  const maxAllowedWidth = canvas.width * HP_BAR_MAX_WIDTH_RATIO;
+  const barWidth = Math.min(desiredWidth, maxAllowedWidth);
+
+  // Фон (тёмно-красный, "пустая" часть HP).
+  ctx.fillStyle = HP_BAR_BG;
+  ctx.fillRect(HP_BAR_X, HP_BAR_Y, barWidth, PLAYER_HP_BAR_HEIGHT);
+
+  // Заливка (текущее HP).
+  const hpRatio = Math.max(0, Math.min(1, player.hp / player.maxHp));
+  ctx.fillStyle = HP_BAR_FG;
+  ctx.fillRect(HP_BAR_X, HP_BAR_Y, barWidth * hpRatio, PLAYER_HP_BAR_HEIGHT);
+
+  // Рамка.
+  ctx.strokeStyle = HP_BAR_BORDER;
+  ctx.lineWidth = HP_BAR_BORDER_WIDTH;
+  ctx.strokeRect(HP_BAR_X, HP_BAR_Y, barWidth, PLAYER_HP_BAR_HEIGHT);
+
+  // Текст слева внутри бара, выровнен по вертикали по центру.
+  ctx.fillStyle = HP_BAR_TEXT_COLOR;
+  ctx.font = HP_BAR_TEXT_FONT;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(
+    `${Math.max(0, Math.ceil(player.hp))} / ${player.maxHp}`,
+    HP_BAR_X + HP_BAR_TEXT_PADDING_X,
+    HP_BAR_Y + PLAYER_HP_BAR_HEIGHT / 2,
+  );
+}
+
+/** Счётчик волн в правом верхнем углу. */
+function drawWaveCounter(ctx: CanvasRenderingContext2D, state: GameState): void {
+  const canvas = ctx.canvas;
+  ctx.fillStyle = WAVE_TEXT_COLOR;
+  ctx.font = WAVE_TEXT_FONT;
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(
+    `Wave ${state.waves.current} / 5`,
+    canvas.width - WAVE_TEXT_RIGHT_PADDING,
+    WAVE_TEXT_Y,
+  );
+}
+
+/**
+ * Иконки взятых бунов в левом нижнем углу.
+ *
+ * Агрегация стеков: state.boons содержит дубликаты (каждое взятие — запись),
+ * для UI показываем по одной иконке на каждый уникальный BoonId с счётчиком ×N
+ * при N > 1. Без агрегации ряд из 5 одинаковых иконок съел бы экран.
+ *
+ * Порядок: в порядке первого появления буна в state.boons (стабильный,
+ * Map сохраняет порядок вставки). Это даёт игроку "историю выборов"
+ * слева направо: первый взятый бун — самый левый.
+ */
+function drawBoonIcons(ctx: CanvasRenderingContext2D, state: GameState): void {
+  if (state.boons.length === 0) return;
+
+  // Агрегируем стеки. Map сохраняет порядок вставки → стабильный layout.
+  const stacks = new Map<BoonId, number>();
+  for (const applied of state.boons) {
+    stacks.set(applied.id, (stacks.get(applied.id) ?? 0) + 1);
+  }
+
+  const canvas = ctx.canvas;
+  const y = canvas.height - BOON_ICON_BOTTOM_PADDING - BOON_ICON_SIZE;
+  let x = BOON_ICON_X;
+
+  for (const [id, count] of stacks) {
+    const def = BOON_DEFINITIONS[id];
+
+    // Цветная плашка фоном.
+    ctx.fillStyle = def.color;
+    ctx.fillRect(x, y, BOON_ICON_SIZE, BOON_ICON_SIZE);
+
+    // Чёрная рамка.
+    ctx.strokeStyle = BOON_ICON_BORDER;
+    ctx.lineWidth = BOON_ICON_BORDER_WIDTH;
+    ctx.strokeRect(x, y, BOON_ICON_SIZE, BOON_ICON_SIZE);
+
+    // Аббревиатура (shortLabel) по центру плашки.
+    ctx.fillStyle = BOON_ICON_LABEL_COLOR;
+    ctx.font = BOON_ICON_LABEL_FONT;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(
+      def.shortLabel,
+      x + BOON_ICON_SIZE / 2,
+      y + BOON_ICON_SIZE / 2,
+    );
+
+    // Счётчик стеков ×N в правом нижнем углу плашки (только если стеков >1).
+    if (count > 1) {
+      const countText = `×${count}`;
+      ctx.font = BOON_ICON_COUNT_FONT;
+      const textWidth = ctx.measureText(countText).width;
+      const bgW = textWidth + BOON_ICON_COUNT_PADDING_X * 2;
+      const bgH = 14 + BOON_ICON_COUNT_PADDING_Y * 2;
+      const bgX = x + BOON_ICON_SIZE - bgW;
+      const bgY = y + BOON_ICON_SIZE - bgH;
+
+      ctx.fillStyle = BOON_ICON_COUNT_BG;
+      ctx.fillRect(bgX, bgY, bgW, bgH);
+
+      ctx.fillStyle = BOON_ICON_COUNT_COLOR;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(countText, bgX + bgW / 2, bgY + bgH / 2);
+    }
+
+    x += BOON_ICON_SIZE + BOON_ICON_GAP;
+  }
 }
 
 /**
