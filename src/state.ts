@@ -69,6 +69,8 @@ export function createInitialState(viewportWidth: number, viewportHeight: number
       iFramesUntil: 0,
       redFlashUntil: 0,
 
+      ultaReadyAt: 0, // готова сразу с начала рана
+
       // --- Прогрессия ---
       level: PLAYER_START_LEVEL,
       xp: 0,
@@ -95,6 +97,7 @@ export function createInitialState(viewportWidth: number, viewportHeight: number
       deltaTime: 0,
     },
     projectiles: [],
+    ultaProjectiles: [],
     enemyProjectiles: [],
     enemies: [],
     waves: {
@@ -128,6 +131,7 @@ export function resetState(state: GameState): void {
   state.camera = fresh.camera;
   state.time = fresh.time;
   state.projectiles = fresh.projectiles;
+  state.ultaProjectiles = fresh.ultaProjectiles;
   state.enemyProjectiles = fresh.enemyProjectiles;
   state.enemies = fresh.enemies;
   state.waves = fresh.waves;

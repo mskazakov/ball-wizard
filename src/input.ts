@@ -6,6 +6,7 @@ import type { GameState } from './utils/types';
 import { resetState } from './state';
 import { getRestartButtonRect, getBoonButtonRects, BOON_SLOTS_TOTAL } from './render';
 import { confirmLevelUp } from './xp';
+import { castUlta } from './ulta';
 
 /**
  * Навешивает обработчики ввода:
@@ -35,31 +36,45 @@ export function setupInput(state: GameState, canvas: HTMLCanvasElement): void {
 
 /**
  * Обрабатывает клик по canvas. Развилка по runState:
+ *   - 'playing':          каст ульты в точку курсора (если не на кулдауне)
  *   - 'won' / 'gameOver': клик по кнопке RESTART → resetState
  *   - 'levelup':          клик по одной из 3 кнопок бунов → confirmLevelUp(id)
- *   - иначе:              игнор (в неделе 3 здесь будет каст ульты)
  *
  * Координаты клика переводим из системы страницы в систему canvas
  * через getBoundingClientRect — иначе при отступах/масштабе попадёт мимо.
  */
 function handleCanvasClick(e: MouseEvent, state: GameState, canvas: HTMLCanvasElement): void {
-  if (
-    state.runState !== 'won' &&
-    state.runState !== 'gameOver' &&
-    state.runState !== 'levelup'
-  ) {
-    return;
-  }
-
   const rect = canvas.getBoundingClientRect();
   const clickX = e.clientX - rect.left;
   const clickY = e.clientY - rect.top;
 
-  if (state.runState === 'levelup') {
+  if (state.runState === 'playing') {
+    handlePlayingClick(state, clickX, clickY);
+  } else if (state.runState === 'levelup') {
     handleLevelUpClick(state, canvas, clickX, clickY);
-  } else {
+  } else if (state.runState === 'won' || state.runState === 'gameOver') {
     handleRestartClick(state, canvas, clickX, clickY);
   }
+}
+
+/**
+ * Клик по canvas во время игры — каст ульты в мировую точку под курсором.
+ *
+ * Перевод screen→world: добавляем смещение камеры к координатам клика.
+ * camera хранит верхний левый угол видимой области в мировых координатах,
+ * поэтому worldX = clickX + camera.x. Это обратное преобразование к
+ * worldToScreen в render.ts.
+ *
+ * Кулдаун проверяется внутри castUlta — если ульта не готова, клик
+ * тихо игнорируется (без визуального индикатора это нормально на дне 1,
+ * cooldown HUD приедет в дне 2).
+ */
+function handlePlayingClick(state: GameState, clickX: number, clickY: number): void {
+  const targetWorld = {
+    x: clickX + state.camera.x,
+    y: clickY + state.camera.y,
+  };
+  castUlta(state, targetWorld);
 }
 
 /**

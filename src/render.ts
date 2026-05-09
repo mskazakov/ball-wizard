@@ -14,6 +14,7 @@ const ARENA_BORDER_COLOR = '#222222';
 const PLAYER_COLOR = '#ffffff';
 const ATTACK_RADIUS_COLOR = 'rgba(120, 200, 255, 0.25)'; // полупрозрачный голубой
 const PROJECTILE_COLOR = '#ffe066'; // жёлтый
+const ULTA_PROJECTILE_COLOR = '#4ec9ff'; // голубой — пробивной снаряд ульты
 const ENEMY_GRUNT_COLOR = '#e74c3c'; // красный — грунт
 const ENEMY_SHOOTER_COLOR = '#9b59b6'; // фиолетовый — стрелок (визуально отличим от грунта)
 const ENEMY_RUSHER_COLOR = '#f39c12'; // жёлто-оранжевый — рашер (заметно отличается от грунта и стрелка)
@@ -206,6 +207,7 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
   drawAttackRadius(ctx, state);
   drawEnemies(ctx, state);
   drawProjectiles(ctx, state);
+  drawUltaProjectiles(ctx, state);
   drawEnemyProjectiles(ctx, state);
   drawPlayer(ctx, state);
   drawHud(ctx, state);
@@ -251,6 +253,21 @@ function drawEnemies(ctx: CanvasRenderingContext2D, state: GameState): void {
 function drawProjectiles(ctx: CanvasRenderingContext2D, state: GameState): void {
   ctx.fillStyle = PROJECTILE_COLOR;
   for (const proj of state.projectiles) {
+    const screen = worldToScreen(proj.position, state);
+    ctx.beginPath();
+    ctx.arc(screen.x, screen.y, proj.radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/**
+ * Снаряды ульты Ball-istics. Минимальный визуал на дне 1 — просто крупный
+ * голубой круг. Толстая линия с трейлом и эффекты на старте/попаданиях
+ * приедут в дне 2 (feedback).
+ */
+function drawUltaProjectiles(ctx: CanvasRenderingContext2D, state: GameState): void {
+  ctx.fillStyle = ULTA_PROJECTILE_COLOR;
+  for (const proj of state.ultaProjectiles) {
     const screen = worldToScreen(proj.position, state);
     ctx.beginPath();
     ctx.arc(screen.x, screen.y, proj.radius, 0, Math.PI * 2);

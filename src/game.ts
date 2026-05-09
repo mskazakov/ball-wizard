@@ -5,6 +5,7 @@ import type { GameState } from './utils/types';
 import { updatePlayer } from './player';
 import { updateCamera } from './arena';
 import { updateProjectiles } from './projectiles';
+import { updateUltaProjectiles } from './ulta';
 import { updateEnemies } from './enemies';
 import { updateEnemyProjectiles } from './enemyProjectiles';
 import { updateWaves } from './waves';
@@ -51,6 +52,7 @@ export function startGame(
       updateEnemies(state);
       updateEnemyProjectiles(state);
       updateProjectiles(state);
+      updateUltaProjectiles(state);
       cleanupDead(state);
       updateWaves(state);
       updateCamera(state);
